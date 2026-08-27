@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const prompt = ref('')
 const activeMode = ref('chat')
+const showModelDropdown = ref(false)
+const modelSelectorRef = ref<HTMLElement | null>(null)
+
+const models = [
+  { id: 'auto', label: 'AUTO' },
+  { id: 'gpt4', label: 'GPT-4' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'gemini', label: 'Gemini' },
+  { id: 'deepseek', label: 'DeepSeek' },
+]
+const selectedModel = ref(models[0])
 
 const modes = [
   { id: 'chat', label: '对话', icon: 'chat' },
@@ -21,6 +32,29 @@ function handleSend() {
   emit('send', prompt.value)
   prompt.value = ''
 }
+
+function selectModel(model: typeof models[0]) {
+  selectedModel.value = model
+  showModelDropdown.value = false
+}
+
+function toggleDropdown() {
+  showModelDropdown.value = !showModelDropdown.value
+}
+
+function onDocumentClick(e: MouseEvent) {
+  if (modelSelectorRef.value && !modelSelectorRef.value.contains(e.target as Node)) {
+    showModelDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+})
 </script>
 
 <template>
@@ -35,7 +69,42 @@ function handleSend() {
           @keyup.enter="handleSend"
         />
       </div>
-      <span class="model-badge">AUTO</span>
+
+      <div ref="modelSelectorRef" class="model-selector">
+        <button class="model-badge" @click="toggleDropdown">
+          {{ selectedModel.label }}
+          <svg
+            :class="['chevron', { open: showModelDropdown }]"
+            width="12" height="12" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        <Transition name="dropdown">
+          <ul v-if="showModelDropdown" class="model-dropdown">
+            <li
+              v-for="model in models"
+              :key="model.id"
+              :class="['model-option', { active: selectedModel.id === model.id }]"
+              @click="selectModel(model)"
+            >
+              {{ model.label }}
+              <svg
+                v-if="selectedModel.id === model.id"
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </li>
+          </ul>
+        </Transition>
+      </div>
+
       <button class="send-btn" :class="{ active: prompt.trim() }" @click="handleSend">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="19" x2="12" y2="5" />
@@ -115,15 +184,82 @@ function handleSend() {
   color: var(--color-text-secondary);
 }
 
-.model-badge {
+.model-selector {
+  position: relative;
   flex-shrink: 0;
+}
+
+.model-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-secondary);
-  padding: 4px 10px;
+  padding: 5px 10px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background: var(--color-bg-white);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.model-badge:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.chevron {
+  transition: transform 0.2s;
+}
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.model-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  z-index: 20;
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.model-option:hover {
+  background: var(--color-hover);
+}
+.model-option.active {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.dropdown-enter-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+.dropdown-leave-active {
+  transition: opacity 0.1s, transform 0.1s;
+}
+.dropdown-enter-from {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .send-btn {
