@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+
 defineProps<{
   sidebarVisible: boolean
 }>()
@@ -6,6 +8,16 @@ defineProps<{
 const emit = defineEmits<{
   toggleSidebar: []
 }>()
+
+const contentBodyRef = ref<HTMLElement | null>(null)
+
+function scrollToNext() {
+  if (!contentBodyRef.value) return
+  contentBodyRef.value.scrollBy({
+    top: window.innerHeight * 0.6,
+    behavior: 'smooth',
+  })
+}
 </script>
 
 <template>
@@ -42,7 +54,7 @@ const emit = defineEmits<{
       </div>
     </header>
 
-    <div class="content-body">
+    <div ref="contentBodyRef" class="content-body">
       <div class="doc-content">
         <p>欢迎使用 LeafAI，这是一个生成与协作平台。</p>
         <p>你可以通过底部的输入栏与 AI 进行对话，生成各类文档内容。</p>
@@ -50,7 +62,7 @@ const emit = defineEmits<{
       </div>
     </div>
 
-    <button class="scroll-btn" title="滚动到下一节" @click="$emit('scrollNext')">
+    <button class="scroll-btn" title="滚动到下一节" @click="scrollToNext">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="6 9 12 15 18 9" />
       </svg>
