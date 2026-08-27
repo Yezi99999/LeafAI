@@ -217,7 +217,7 @@ onUnmounted(() => {
 
 .model-dropdown {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   right: 0;
   min-width: 140px;
   background: var(--color-bg-white);
@@ -255,11 +255,11 @@ onUnmounted(() => {
 }
 .dropdown-enter-from {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(4px);
 }
 .dropdown-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(4px);
 }
 
 .send-btn {
