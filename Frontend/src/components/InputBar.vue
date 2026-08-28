@@ -160,6 +160,7 @@ onUnmounted(() => {
   padding: 0 24px 20px;
   background: transparent;
   pointer-events: none;
+  min-width: 540px;
 }
 
 .input-card {

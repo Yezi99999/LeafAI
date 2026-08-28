@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 
 defineProps<{
   sidebarVisible: boolean
@@ -9,15 +9,45 @@ const emit = defineEmits<{
   toggleSidebar: []
 }>()
 
+interface Message {
+  id: number
+  role: 'system' | 'user'
+  content: string
+  time: string
+}
+
+const messages = ref<Message[]>([
+  {
+    id: 1,
+    role: 'system',
+    content: '欢迎使用 LeafAI 智能工作台！我是你的 AI 助手，可以帮助你完成文档生成、数据分析、代码编写等任务。请随时告诉我你需要什么。',
+    time: '刚刚',
+  },
+  {
+    id: 2,
+    role: 'user',
+    content: '帮我生成一份产品需求文档',
+    time: '刚刚',
+  },
+  {
+    id: 3,
+    role: 'system',
+    content: '好的，我来为你生成一份产品需求文档（PRD）。请稍等，正在整理文档结构和内容要点...',
+    time: '刚刚',
+  },
+])
+
 const contentBodyRef = ref<HTMLElement | null>(null)
 
-function scrollToNext() {
-  if (!contentBodyRef.value) return
-  contentBodyRef.value.scrollBy({
-    top: window.innerHeight * 0.6,
-    behavior: 'smooth',
+function scrollToBottom() {
+  nextTick(() => {
+    if (contentBodyRef.value) {
+      contentBodyRef.value.scrollTop = contentBodyRef.value.scrollHeight
+    }
   })
 }
+
+watch(messages, () => scrollToBottom(), { deep: true })
 </script>
 
 <template>
@@ -39,7 +69,7 @@ function scrollToNext() {
       </div>
 
       <div class="header-center">
-        <h1 class="doc-title">LeafAI</h1>
+        <h1 class="doc-title">AI 工作台</h1>
         <p class="doc-notice">AI 生成可能有误，注意核实</p>
       </div>
 
@@ -55,14 +85,21 @@ function scrollToNext() {
     </header>
 
     <div ref="contentBodyRef" class="content-body">
-      <div class="doc-content">
-        <p>欢迎使用 LeafAI，这是一个生成与协作平台。</p>
-        <p>你可以通过底部的输入栏与 AI 进行对话，生成各类文档内容。</p>
-        <p>左侧导航栏可以帮助你快速切换功能模块和查看历史记录。</p>
+      <div class="chat-messages">
+        <div
+          v-for="msg in messages"
+          :key="msg.id"
+          :class="['message-row', msg.role]"
+        >
+          <div :class="['message-bubble', msg.role]">
+            <div class="bubble-text">{{ msg.content }}</div>
+            <div class="bubble-time">{{ msg.time }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <button class="scroll-btn" title="滚动到下一节" @click="scrollToNext">
+    <button class="scroll-btn" title="滚动到底部" @click="scrollToBottom">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="6 9 12 15 18 9" />
       </svg>
@@ -118,7 +155,7 @@ function scrollToNext() {
 }
 
 .doc-title {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 4px;
@@ -132,15 +169,60 @@ function scrollToNext() {
 .content-body {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 48px;
+  padding: 24px 32px;
   padding-bottom: calc(var(--input-bar-height) + 32px);
 }
 
-.doc-content p {
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--color-text-primary);
-  margin-bottom: 16px;
+.chat-messages {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row.system {
+  justify-content: flex-start;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+.message-bubble {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  position: relative;
+}
+
+.message-bubble.system {
+  background: #f3f4f6;
+  border-top-left-radius: 4px;
+}
+
+.message-bubble.user {
+  background: var(--color-accent);
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+.bubble-text {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-time {
+  font-size: 11px;
+  margin-top: 6px;
+  opacity: 0.5;
+  text-align: right;
 }
 
 .scroll-btn {

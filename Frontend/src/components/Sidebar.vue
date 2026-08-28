@@ -16,7 +16,12 @@ const recentItems = [
   { id: 4, color: '#8B5CF6', text: '生成周报摘要' },
 ]
 
-const activeNav = ref('new-chat')
+const activeNav = ref('workspace')
+const isLoggedIn = ref(false)
+
+function toggleLogin() {
+  isLoggedIn.value = !isLoggedIn.value
+}
 </script>
 
 <template>
@@ -94,13 +99,30 @@ const activeNav = ref('new-chat')
     </div>
 
     <div class="sidebar-footer">
-      <button class="footer-btn">
+      <button v-if="!isLoggedIn" class="footer-btn full" @click="toggleLogin">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+          <polyline points="10 17 15 12 10 7" />
+          <line x1="15" y1="12" x2="3" y2="12" />
         </svg>
-        <span>我的</span>
+        <span>登录/注册</span>
       </button>
+      <div v-else class="footer-row">
+        <button class="footer-btn" @click="toggleLogin">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>我的</span>
+        </button>
+        <button class="icon-btn logout-btn" title="退出登录" @click="toggleLogin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
+      </div>
     </div>
   </aside>
 </template>
@@ -115,6 +137,14 @@ const activeNav = ref('new-chat')
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+}
+
+.sidebar.overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
 }
 
 .sidebar-header {
@@ -267,11 +297,16 @@ const activeNav = ref('new-chat')
   border-top: 1px solid var(--color-border);
 }
 
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .footer-btn {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -280,5 +315,12 @@ const activeNav = ref('new-chat')
 }
 .footer-btn:hover {
   background: var(--color-hover);
+}
+.footer-btn.full {
+  width: 100%;
+}
+
+.logout-btn {
+  flex-shrink: 0;
 }
 </style>
