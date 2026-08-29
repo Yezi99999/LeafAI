@@ -1,0 +1,103 @@
+{
+  "aspect_ratios": [
+    {
+      "ratio": "1:1",
+      "description": "正方形",
+      "resolutions": {
+        "1K": { "original": "1080x1080", "aligned": "1088x1088" },
+        "2K": { "original": "2048x2048", "aligned": "2048x2048" },
+        "4K": { "original": "2880x2880", "aligned": "2880x2880" }
+      }
+    },
+    {
+      "ratio": "3:2",
+      "description": "横版",
+      "resolutions": {
+        "1K": { "original": "1920x1280", "aligned": "1920x1280" },
+        "2K": { "original": "2560x1706", "aligned": "2560x1712" },
+        "4K": { "original": "3456x2304", "aligned": "3456x2304" }
+      }
+    },
+    {
+      "ratio": "2:3",
+      "description": "竖版",
+      "resolutions": {
+        "1K": { "original": "1280x1920", "aligned": "1280x1920" },
+        "2K": { "original": "1706x2560", "aligned": "1712x2560" },
+        "4K": { "original": "2304x3456", "aligned": "2304x3456" }
+      }
+    },
+    {
+      "ratio": "16:9",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1920x1080", "aligned": "1920x1088" },
+        "2K": { "original": "2560x1440", "aligned": "2560x1440" },
+        "4K": { "original": "3840x2160", "aligned": "3840x2160" }
+      }
+    },
+    {
+      "ratio": "9:16",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1080x1920", "aligned": "1088x1920" },
+        "2K": { "original": "1440x2560", "aligned": "1440x2560" },
+        "4K": { "original": "2160x3840", "aligned": "2160x3840" }
+      }
+    },
+    {
+      "ratio": "1:2",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "960x1920", "aligned": "960x1920" },
+        "2K": { "original": "1280x2560", "aligned": "1280x2560" },
+        "4K": { "original": "1920x3840", "aligned": "1920x3840" }
+      }
+    },
+    {
+      "ratio": "2:1",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1920x960", "aligned": "1920x960" },
+        "2K": { "original": "2560x1280", "aligned": "2560x1280" },
+        "4K": { "original": "3840x1920", "aligned": "3840x1920" }
+      }
+    },
+    {
+      "ratio": "4:3",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1440x1080", "aligned": "1440x1088" },
+        "2K": { "original": "1920x1440", "aligned": "1920x1440" },
+        "4K": { "original": "2880x2160", "aligned": "2880x2176" }
+      }
+    },
+    {
+      "ratio": "3:4",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1080x1440", "aligned": "1088x1440" },
+        "2K": { "original": "1440x1920", "aligned": "1440x1920" },
+        "4K": { "original": "2160x2880", "aligned": "2176x2880" }
+      }
+    },
+    {
+      "ratio": "5:4",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1500x1200", "aligned": "1504x1200" },
+        "2K": { "original": "2000x1600", "aligned": "2000x1600" },
+        "4K": { "original": "3000x2400", "aligned": "3008x2400" }
+      }
+    },
+    {
+      "ratio": "4:5",
+      "description": "",
+      "resolutions": {
+        "1K": { "original": "1200x1500", "aligned": "1200x1504" },
+        "2K": { "original": "1600x2000", "aligned": "1600x2000" },
+        "4K": { "original": "2400x3000", "aligned": "2400x3008" }
+      }
+    }
+  ]
+}
