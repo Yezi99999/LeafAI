@@ -16,6 +16,10 @@ from app.schemas.chat import (
 from app.schemas.common import BaseResponse
 from app.services.ai_scheduler import get_scheduler, AIScheduler
 from app.api.v1.deps import get_current_user
+from app.services.toggle_service import ensure_enabled
+from app.services.billing import resolve_charge, settle_success, PLAN_POINTS, PLAN_QUOTA
+from app.services.points_service import effective_unit_points, record_transaction
+from app.services import notify_service
 
 router = APIRouter(prefix="/chat", tags=["Chat对话"])
 
@@ -27,12 +31,19 @@ async def chat_completions(
     scheduler: AIScheduler = Depends(get_scheduler),
     current_user: User = Depends(get_current_user),
 ):
+    await ensure_enabled(db, "chat", current_user)
     client = await scheduler.get_chat_client(db, req.model_id)
     model = await scheduler._get_model(db, req.model_id)
 
+    # 计费：提交时确定结算计划（免费/免费次数/积分），成功后结算
+    cost = await effective_unit_points(db, "chat", model)
+    plan, charge_err = resolve_charge(current_user, "chat", cost)
+    if charge_err:
+        raise HTTPException(status_code=400, detail=charge_err)
+
     if req.stream:
         return StreamingResponse(
-            _stream_chat(client, model.model_name, req.messages, db, req.session_id, req.model_id, current_user.id),
+            _stream_chat(client, model.model_name, req.messages, db, req.session_id, req.model_id, current_user, plan, cost),
             media_type="text/event-stream",
         )
 
@@ -47,10 +58,36 @@ async def chat_completions(
     session_id = await _ensure_session(db, req.session_id, current_user.id, req.model_id)
     token_count = (result.get("usage") or {}).get("total_tokens", 0)
     await _save_chat_history(db, req.messages, session_id, result, token_count)
+    notif = await _settle_chat(db, current_user, plan, cost, req.model_id, token_count=token_count)
+    await db.commit()
+    if notif is not None:
+        await notify_service.hub.publish(
+            notif.user_id, notify_service.event_from_notification(notif),
+        )
     return BaseResponse(data=result)
 
 
-async def _stream_chat(client, model_name, messages, db, session_id, model_id, user_id):
+async def _settle_chat(db, user, plan, cost, model_id, token_count=0, task_id=None):
+    """对话成功后结算：扣免费次数或积分，积分扣减落流水 + 通知。返回可能创建的通知对象。"""
+    if plan == PLAN_POINTS:
+        settle_success(user, "chat", cost, plan)
+        await record_transaction(
+            db, user.id, "consume", -cost,
+            balance_after=user.points_balance,
+            service_code="chat", model_id=model_id, task_id=task_id,
+            remark=f"对话 token {token_count}",
+        )
+        return notify_service.create_notification(
+            db, user.id, "points", "积分消耗",
+            f"对话已扣 {cost} 积分",
+            {"task_id": task_id, "points": -cost, "balance": user.points_balance},
+        )
+    if plan == PLAN_QUOTA:
+        settle_success(user, "chat", cost, plan)
+    return None
+
+
+async def _stream_chat(client, model_name, messages, db, session_id, model_id, user, plan, cost):
     history_messages = [m.model_dump() for m in messages]
     full_content = ""
     token_count = 0
@@ -73,11 +110,17 @@ async def _stream_chat(client, model_name, messages, db, session_id, model_id, u
                     full_content += content
                     yield f"data: {json.dumps({'id': request_id, 'choices': [{'delta': {'content': content}}]})}\n\n"
 
-        yield "data: [DONE]\n\n"
-
         if full_content:
-            session_id = await _ensure_session(db, session_id, user_id, model_id)
+            session_id = await _ensure_session(db, session_id, user.id, model_id)
             await _save_stream_history(db, messages, full_content, session_id, token_count)
+            notif = await _settle_chat(db, user, plan, cost, model_id, token_count=token_count, task_id=request_id)
+            await db.commit()
+            if notif is not None:
+                await notify_service.hub.publish(
+                    notif.user_id, notify_service.event_from_notification(notif),
+                )
+
+        yield "data: [DONE]\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
@@ -149,7 +192,7 @@ async def list_sessions(
     total = len(count_result.scalars().all())
 
     return BaseResponse(data={
-        "sessions": [ChatSessionResponse.model_validate(s) for s in sessions],
+        "items": [ChatSessionResponse.model_validate(s) for s in sessions],
         "total": total,
     })
 
@@ -164,7 +207,10 @@ async def get_session_messages(
     messages = result.scalars().all()
     if not messages:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return BaseResponse(data=[ChatMessageResponse.model_validate(m) for m in messages])
+    return BaseResponse(data={
+        "items": [ChatMessageResponse.model_validate(m) for m in messages],
+        "total": len(messages),
+    })
 
 
 @router.delete("/sessions/{session_id}")

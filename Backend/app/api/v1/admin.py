@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.session import get_db
-from app.db.models import AIProvider, AIModel
+from app.db.models import AIProvider, AIModel, User
 from app.schemas.admin import (
     ProviderCreate, ProviderUpdate, ProviderResponse,
     ModelCreate, ModelUpdate, ModelResponse,
+    ModelDeployRequest, ModelVersionRequest, ModelMetricsResponse,
 )
-from app.schemas.common import BaseResponse, PaginatedResponse
+from app.schemas.common import BaseResponse
+from app.api.v1.deps import get_current_superuser
 
-router = APIRouter(prefix="/admin", tags=["管理后台"])
+router = APIRouter(prefix="/admin", tags=["管理后台"], dependencies=[Depends(get_current_superuser)])
 
 
 @router.get("/providers", response_model=BaseResponse)
@@ -36,6 +39,8 @@ async def list_providers(
     return BaseResponse(data={
         "items": [ProviderResponse.model_validate(p) for p in providers],
         "total": total,
+        "page": page,
+        "page_size": page_size,
     })
 
 
@@ -118,6 +123,8 @@ async def list_models(
     return BaseResponse(data={
         "items": [ModelResponse.model_validate(m) for m in models],
         "total": total,
+        "page": page,
+        "page_size": page_size,
     })
 
 
@@ -137,6 +144,12 @@ async def create_model(
         model_name=req.model_name,
         is_default=req.is_default,
         is_enabled=req.is_enabled,
+        prompt_max_length=req.prompt_max_length,
+        version=req.version,
+        deploy_env=req.deploy_env,
+        deploy_status=req.deploy_status,
+        unit_points=req.unit_points,
+        last_deploy_time=datetime.utcnow() if req.deploy_status == "running" else None,
     )
     db.add(model)
     await db.flush()
@@ -159,6 +172,74 @@ async def update_model(
         setattr(model, key, value)
 
     return BaseResponse(data=ModelResponse.model_validate(model))
+
+
+@router.get("/models/{model_id}", response_model=BaseResponse)
+async def get_model_detail(
+    model_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AIModel).where(AIModel.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    return BaseResponse(data=ModelResponse.model_validate(model))
+
+
+@router.put("/models/{model_id}/deploy", response_model=BaseResponse)
+async def update_model_deploy(
+    model_id: int,
+    req: ModelDeployRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AIModel).where(AIModel.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    model.deploy_status = req.deploy_status
+    if req.deploy_status == "running":
+        model.last_deploy_time = datetime.utcnow()
+    return BaseResponse(data=ModelResponse.model_validate(model))
+
+
+@router.post("/models/{model_id}/versions", response_model=BaseResponse)
+async def register_model_version(
+    model_id: int,
+    req: ModelVersionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AIModel).where(AIModel.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    model.version = req.version
+    model.deploy_env = req.deploy_env
+    model.last_deploy_time = datetime.utcnow()
+    return BaseResponse(data=ModelResponse.model_validate(model))
+
+
+@router.get("/models/{model_id}/metrics", response_model=BaseResponse)
+async def get_model_metrics(
+    model_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AIModel).where(AIModel.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    total = model.success_count + model.fail_count
+    rate = round(model.success_count / total, 4) if total > 0 else 0.0
+    return BaseResponse(data=ModelMetricsResponse(
+        id=model.id,
+        model_name=model.model_name,
+        avg_latency_ms=model.avg_latency_ms,
+        success_count=model.success_count,
+        fail_count=model.fail_count,
+        success_rate=rate,
+    ))
 
 
 @router.delete("/models/{model_id}", response_model=BaseResponse)

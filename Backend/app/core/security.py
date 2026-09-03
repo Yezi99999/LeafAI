@@ -3,7 +3,10 @@ from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 
-SECRET_KEY = "leafai-secret-key-change-in-production"
+from app.core.config import get_settings
+
+_settings = get_settings()
+SECRET_KEY = _settings.JWT_SECRET or "leafai-secret-key-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 

@@ -103,7 +103,7 @@ async def list_tasks(
     total = len(count_result.scalars().all())
 
     return BaseResponse(data={
-        "tasks": [TaskStatusResponse(
+        "items": [TaskStatusResponse(
             task_id=t.task_id,
             category=t.category,
             status=t.status.value,
@@ -114,4 +114,6 @@ async def list_tasks(
             update_time=t.update_time,
         ) for t in tasks],
         "total": total,
+        "page": page,
+        "page_size": page_size,
     })

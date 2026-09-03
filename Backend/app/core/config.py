@@ -26,8 +26,13 @@ class Settings(BaseSettings):
 
     FILE_STORAGE_PATH: str = "./storage"
 
-    DUOMI_API_KEY: str = ""
+    # 图片服务（OpenAI 兼容参数，任意同类服务均可）与对话服务
+    IMAGE_API_KEY: str = ""
+    IMAGE_BASE_URL: str = ""
     DEEPSEEK_API_KEY: str = ""
+
+    # JWT 签名密钥；生产环境务必通过环境变量覆盖
+    JWT_SECRET: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "allow"}
 

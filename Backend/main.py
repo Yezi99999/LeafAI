@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 import uvicorn
 import tomllib
@@ -10,7 +12,9 @@ from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.db.session import engine, Base
 from app.db.models import (
-    User, AIProvider, AIModel, AIChatSession, AIChatMessage, AITask
+    User, AIProvider, AIModel, AIChatSession, AIChatMessage, AITask, OperationLog,
+    FeatureToggle, PointsConsumptionRate, PointsTransaction, UserNotification,
+    BusinessDailyStats, SystemConfig,
 )
 from app.api.v1.chat import router as chat_router
 from app.api.v1.image import router as image_router
@@ -18,8 +22,21 @@ from app.api.v1.video import router as video_router
 from app.api.v1.audio import router as audio_router
 from app.api.v1.task import router as task_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.admin_users import router as admin_users_router
+from app.api.v1.admin_features import admin_router as admin_features_router
+from app.api.v1.admin_features import client_router as features_client_router
+from app.api.v1.admin_points import router as admin_points_router
+from app.api.v1.admin_notify import router as admin_notify_router
+from app.api.v1.admin_analytics import router as admin_analytics_router
+from app.api.v1.admin_audit import router as admin_audit_router
+from app.api.v1.admin_config import router as admin_config_router
+from app.api.v1.admin_records import router as admin_records_router
+from app.api.v1.points import router as points_router
+from app.api.v1.notify import router as notify_router
 from app.api.v1.config import router as config_router
 from app.api.v1.auth import router as auth_router
+
+from app.services.toggle_service import ensure_defaults
 
 settings = get_settings()
 
@@ -42,6 +59,11 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        # 预置核心能力开关（避免管理员手动逐个创建）；已存在则跳过
+        from app.db.session import async_session_factory
+        async with async_session_factory() as _db:
+            await ensure_defaults(_db)
+            await _db.commit()
         print("数据库表初始化完成")
     except Exception as e:
         print(f"数据库连接失败，表未自动创建: {e}")
@@ -80,6 +102,32 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """统一 HTTP 错误信封：所有接口返回 code/msg/data。"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.status_code,
+            "msg": str(exc.detail),
+            "data": None,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """参数校验错误统一信封。"""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "msg": "参数校验失败",
+            "data": exc.errors(),
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -99,6 +147,17 @@ app.include_router(video_router, prefix=api_prefix)
 app.include_router(audio_router, prefix=api_prefix)
 app.include_router(task_router, prefix=api_prefix)
 app.include_router(admin_router, prefix=api_prefix)
+app.include_router(admin_users_router, prefix=api_prefix)
+app.include_router(admin_features_router, prefix=api_prefix)
+app.include_router(features_client_router, prefix=api_prefix)
+app.include_router(admin_points_router, prefix=api_prefix)
+app.include_router(admin_notify_router, prefix=api_prefix)
+app.include_router(admin_analytics_router, prefix=api_prefix)
+app.include_router(admin_audit_router, prefix=api_prefix)
+app.include_router(admin_config_router, prefix=api_prefix)
+app.include_router(admin_records_router, prefix=api_prefix)
+app.include_router(points_router, prefix=api_prefix)
+app.include_router(notify_router, prefix=api_prefix)
 app.include_router(config_router, prefix=api_prefix)
 app.include_router(auth_router, prefix=api_prefix)
 

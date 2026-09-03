@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import NotificationBell from './NotificationBell.vue'
 
 interface Message {
   id: number
@@ -133,6 +134,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </div>
 
       <div class="header-right">
+        <NotificationBell />
         <button class="icon-btn" title="更多">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="5" cy="12" r="2" />
@@ -457,8 +459,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   transition: background 0.15s, color 0.15s;
 }
 .icon-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--color-accent);
 }
 
 .header-center {

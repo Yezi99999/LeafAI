@@ -27,3 +27,6 @@ class UserInfoResponse(BaseModel):
     email: Optional[str] = None
     is_active: bool
     is_superuser: bool
+    role: str = "user"
+    points_balance: int = 0
+    free_quota: dict = Field(default_factory=dict, description="各能力剩余免费次数")

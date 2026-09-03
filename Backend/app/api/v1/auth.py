@@ -79,4 +79,7 @@ async def get_me(
         email=current_user.email,
         is_active=current_user.is_active,
         is_superuser=current_user.is_superuser,
+        role=current_user.role,
+        points_balance=current_user.points_balance,
+        free_quota=current_user.free_quota or {},
     ))

@@ -1,8 +1,20 @@
 """
-LeafAI 数据库初始化脚本
-一次性完成：创建数据库 + 创建所有表 + 种子数据
+LeafAI 数据库初始化 + 管理员设置脚本
+
+用法（在 Backend 目录下执行）：
+    python init_db.py
+    python init_db.py --admin-username admin --admin-password 'your-secret'
+    python init_db.py --admin-username admin --admin-password 'new-secret' --reset-admin
+
+说明：
+    - 一次性完成：创建数据库 + 创建所有表 + 种子数据（服务商/模型/功能开关）。
+    - 管理员用户名/密码优先取命令行参数，其次取环境变量 ADMIN_USERNAME / ADMIN_PASSWORD，
+      最后兜底为 admin / admin123。
+    - 管理员已存在时默认【不覆盖密码】；如需重置密码请加 --reset-admin。
 """
 import asyncio
+import argparse
+import os
 import sys
 from urllib.parse import urlparse
 import asyncpg
@@ -10,6 +22,29 @@ from datetime import datetime
 from app.core.config import get_settings
 
 settings = get_settings()
+
+parser = argparse.ArgumentParser(description="LeafAI 数据库初始化与管理员设置")
+parser.add_argument(
+    "--admin-username", default=None,
+    help="管理员用户名（默认取环境变量 ADMIN_USERNAME，兜底为 admin）",
+)
+parser.add_argument(
+    "--admin-password", default=None,
+    help="管理员密码（默认取环境变量 ADMIN_PASSWORD，兜底为 admin123）",
+)
+parser.add_argument(
+    "--reset-admin", action="store_true",
+    help="当管理员已存在时强制重置其密码；不带此参数则保留原密码",
+)
+_cli_args = parser.parse_args()
+
+ADMIN_USERNAME = _cli_args.admin_username or os.environ.get("ADMIN_USERNAME") or "admin"
+ADMIN_PASSWORD = _cli_args.admin_password or os.environ.get("ADMIN_PASSWORD") or "admin123"
+RESET_ADMIN = _cli_args.reset_admin or bool(os.environ.get("ADMIN_RESET_PASSWORD"))
+_IS_AUTO = (
+    _cli_args.admin_password is not None
+    or os.environ.get("ADMIN_PASSWORD") is not None
+)
 
 
 # 数据库连接信息从环境变量 / .env 解析，避免在版本库中写入密码
@@ -91,52 +126,65 @@ async def create_tables_and_seed():
         if missing_users:
             print(f"[OK] 已为 {len(missing_users)} 个用户补充 user_id")
 
-        # 2. 创建或更新默认管理员
-        user = await db.get(User, 1)
-        if not user:
-            user = User(
-                id=1,
+        # 2. 创建或更新管理员（可按参数自定义用户名/密码；已存在时不覆盖密码，除非 --reset-admin）
+        admin = await db.execute(
+            __import__("sqlalchemy").select(User).where(User.username == ADMIN_USERNAME)
+        )
+        admin = admin.scalar_one_or_none()
+        if not admin:
+            admin = User(
                 user_id=uuid.uuid4().hex[:16],
-                username="admin",
-                email="admin@leafai.local",
-                hashed_password=hash_password("admin123"),
+                username=ADMIN_USERNAME,
+                email=f"{ADMIN_USERNAME}@leafai.local",
+                hashed_password=hash_password(ADMIN_PASSWORD),
                 is_active=True,
                 is_superuser=True,
             )
-            db.add(user)
+            db.add(admin)
             await db.flush()
-            print("[OK] 默认用户 admin 创建成功 (id=1)")
+            print(f"[OK] 管理员 '{ADMIN_USERNAME}' 创建成功 (id={admin.id})")
         else:
-            user.hashed_password = hash_password("admin123")
-            if not user.user_id:
-                user.user_id = uuid.uuid4().hex[:16]
-            print("[OK] 默认用户已存在 (id=1)，密码已更新")
+            admin.is_superuser = True
+            admin.is_active = True
+            if not admin.user_id:
+                admin.user_id = uuid.uuid4().hex[:16]
+            if RESET_ADMIN:
+                admin.hashed_password = hash_password(ADMIN_PASSWORD)
+                print(f"[OK] 管理员 '{ADMIN_USERNAME}' 已存在，密码已重置 (id={admin.id})")
+            else:
+                print(
+                    f"[OK] 管理员 '{ADMIN_USERNAME}' 已存在 (id={admin.id})"
+                    f"{'，保留原密码' if not _IS_AUTO else ''}。"
+                    "如需重置密码请加 --reset-admin"
+                )
+        admin_id = admin.id
 
-        # 2. 创建 DUOMI 服务商（图片，id=1）
-        duomi = await db.execute(
-            __import__("sqlalchemy").select(AIProvider).where(AIProvider.name == "DUOMI")
+        # 2. 创建图片服务服务商（通用 OpenAI 兼容参数，任意同类服务均可；id=1）
+        image_provider = await db.execute(
+            __import__("sqlalchemy").select(AIProvider).where(AIProvider.name == "Image Provider")
         )
-        duomi = duomi.scalar_one_or_none()
-        duomi_key = settings.DUOMI_API_KEY
-        if not duomi:
-            duomi = AIProvider(
+        image_provider = image_provider.scalar_one_or_none()
+        image_key = settings.IMAGE_API_KEY
+        image_base_url = settings.IMAGE_BASE_URL or "https://duomiapi.com/v1"
+        if not image_provider:
+            image_provider = AIProvider(
                 id=1,
-                name="DUOMI",
+                name="Image Provider",
                 category=ProviderCategory.IMAGE,
-                api_key=duomi_key,
-                base_url="https://duomiapi.com/v1",
+                api_key=image_key,
+                base_url=image_base_url,
                 timeout=120,
                 extra_config={"async": True, "api_path": "/images/generations"},
                 is_enabled=True,
                 priority=1,
             )
-            db.add(duomi)
+            db.add(image_provider)
             await db.flush()
-            print(f"[OK] DUOMI 服务商创建成功 (id={duomi.id})")
+            print(f"[OK] 图片服务服务商创建成功 (id={image_provider.id})")
         else:
-            if settings.DUOMI_API_KEY:
-                duomi.api_key = settings.DUOMI_API_KEY
-            print(f"[OK] DUOMI 服务商已存在 (id={duomi.id})")
+            if settings.IMAGE_API_KEY:
+                image_provider.api_key = settings.IMAGE_API_KEY
+            print(f"[OK] 图片服务服务商已存在 (id={image_provider.id})")
 
         # 2.1 创建 DeepSeek 服务商（对话，id=2），使用 env 配置的 DeepSeek_API_KEY
         deepseek = await db.execute(
@@ -171,7 +219,7 @@ async def create_tables_and_seed():
         if not model:
             model = AIModel(
                 display_name="GPT-Image-2",
-                provider_id=duomi.id,
+                provider_id=image_provider.id,
                 category=ProviderCategory.IMAGE,
                 model_name="gpt-image-2",
                 is_default=True,
@@ -219,7 +267,7 @@ async def create_tables_and_seed():
         orphan_tasks = result_task.scalars().all()
         if orphan_tasks:
             for t in orphan_tasks:
-                t.user_id = 1
+                t.user_id = admin_id
             print(f"[OK] 已将 {len(orphan_tasks)} 条 ai_task 关联到 admin")
 
         result_session = await db.execute(
@@ -228,7 +276,7 @@ async def create_tables_and_seed():
         orphan_sessions = result_session.scalars().all()
         if orphan_sessions:
             for s in orphan_sessions:
-                s.user_id = 1
+                s.user_id = admin_id
             print(f"[OK] 已将 {len(orphan_sessions)} 条 ai_chat_session 关联到 admin")
 
         if not orphan_tasks and not orphan_sessions:
@@ -249,8 +297,8 @@ async def main():
 
     print("=" * 50)
     print("初始化完成！种子数据：")
-    print("  - 用户: admin (id=1)")
-    print("  - 服务商: DUOMI (id=1, 图片) / DeepSeek (id=2, 对话)")
+    print(f"  - 管理员: {ADMIN_USERNAME}（密码{'已按参数设置' if _IS_AUTO else '：admin123'}；生产环境请务必通过参数或环境变量指定）")
+    print("  - 服务商: 图片服务 (OpenAI 兼容) / DeepSeek (对话)")
     print("  - 模型: gpt-image-2 / deepseek-chat")
     print("=" * 50)
 

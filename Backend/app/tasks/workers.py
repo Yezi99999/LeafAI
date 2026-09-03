@@ -3,13 +3,53 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import async_session_factory
-from app.db.models import AITask, TaskStatus
+from app.db.models import AITask, TaskStatus, User, AIModel
 from app.services.ai_scheduler import AIScheduler
+from app.services.billing import settle_success, PLAN_POINTS, CHARGE_PLAN_KEY, CHARGE_POINTS_KEY
+from app.services.points_service import record_transaction
+from app.services import notify_service
 
 logger = logging.getLogger(__name__)
 
 MAX_POLL_ATTEMPTS = 120
 POLL_INTERVAL = 5
+
+
+async def _settle_and_stats(db, task):
+    """任务成功后的积分/次数结算 + 模型性能统计。"""
+    plan = (task.input_params or {}).get(CHARGE_PLAN_KEY)
+    points = (task.input_params or {}).get(CHARGE_POINTS_KEY, 0) or 0
+
+    user = await db.get(User, task.user_id)
+    created_notif = None
+    if user and plan:
+        settle_success(user, "image", points, plan)
+        if plan == PLAN_POINTS:
+            # 仅积分扣减落流水，剩余为当前余额快照
+            await record_transaction(
+                db, user.id, "consume", -points,
+                balance_after=user.points_balance,
+                service_code="image_generate",
+                task_id=task.task_id,
+                model_id=task.model_id,
+            )
+            # 落通知（SSE 推送在调用方 commit 后进行）
+            created_notif = notify_service.create_notification(
+                db, user.id, "points", "积分消耗",
+                f"图片生成已扣 {points} 积分",
+                {"task_id": task.task_id, "points": -points, "balance": user.points_balance},
+            )
+
+    model = await db.get(AIModel, task.model_id)
+    if model:
+        model.success_count = (model.success_count or 0) + 1
+    return created_notif
+
+
+async def _mark_failed_stats(db, task):
+    model = await db.get(AIModel, task.model_id)
+    if model:
+        model.fail_count = (model.fail_count or 0) + 1
 
 
 async def execute_image_task(task_id: str):
@@ -69,13 +109,20 @@ async def execute_image_task(task_id: str):
                         "description": remote_result.get("data", {}).get("description", ""),
                         "progress": 100,
                     }
+                    created_notif = await _settle_and_stats(db, task)
                     await db.commit()
+                    if created_notif is not None:
+                        await notify_service.hub.publish(
+                            created_notif.user_id,
+                            notify_service.event_from_notification(created_notif),
+                        )
                     return
 
                 elif state == "error":
                     task.status = TaskStatus.FAILED
                     task.error_msg = remote_result.get("data", {}).get("description", "远程任务失败")
                     task.result = {"remote_task_id": remote_task_id, "raw_response": remote_result}
+                    await _mark_failed_stats(db, task)
                     await db.commit()
                     return
 
@@ -97,6 +144,7 @@ async def execute_image_task(task_id: str):
                     task.status = TaskStatus.FAILED
                     task.error_msg = str(e)
                     task.retry_count += 1
+                    await _mark_failed_stats(db, task)
                     await db.commit()
 
 

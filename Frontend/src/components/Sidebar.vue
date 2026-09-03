@@ -28,23 +28,65 @@ const props = defineProps<{
   assets: Asset[]
   isLoggedIn: boolean
   currentUser: UserInfo | null
+  enabledFeatures?: Set<string>
+  collapsed?: boolean
+  currentView?: string
 }>()
 
 const emit = defineEmits<{
   login: []
   logout: []
+  admin: []
+  navigate: [view: string]
 }>()
 
-const navItems = [
-  { id: 'new-chat', label: '新对话', icon: 'chat' },
+interface NavItem {
+  id: string
+  label: string
+  icon?: string
+  feature?: string
+  hasArrow?: boolean
+  hasExpand?: boolean
+}
+
+const navItems: NavItem[] = [
+  { id: 'new-chat', label: '新对话', icon: 'chat', feature: 'chat' },
   { id: 'workspace', label: 'AI 工作台', icon: 'monitor' },
   { id: 'skills', label: '技能·连接器·伙伴', icon: 'link' },
   { id: 'api', label: 'API 服务', icon: 'api', hasArrow: true },
   { id: 'more', label: '更多', icon: 'more', hasExpand: true },
 ]
 
-const activeNav = ref('workspace')
+// 功能开关关闭时隐藏对应入口；无映射的导航（如 AI 工作台）始终显示
+const visibleNavItems = computed(() =>
+  navItems.filter((item) => !item.feature || (props.enabledFeatures?.has(item.feature) ?? true))
+)
+
+// 由 App 的 currentView 驱动高亮：chat/image 归到「新对话」，docs 归「API 服务」
+const activeNav = computed(() => {
+  const v = props.currentView || 'workspace'
+  if (v === 'chat' || v === 'image') return 'new-chat'
+  if (v === 'workspace') return 'workspace'
+  if (v === 'docs') return 'api'
+  if (v === 'my-points' || v === 'my-recharges') return 'more'
+  return 'workspace'
+})
+const moreOpen = ref(false)
 const selectedAsset = ref<Asset | null>(null)
+
+function onNavClick(item: NavItem) {
+  if (item.id === 'more') {
+    // 展开「更多」下拉菜单，不在主内容区切换视图
+    moreOpen.value = !moreOpen.value
+    return
+  }
+  moreOpen.value = false
+  emit('navigate', item.id)
+}
+function onMoreSelect(view: string) {
+  moreOpen.value = false
+  emit('navigate', view)
+}
 
 const maxVisible = 5
 const visibleAssets = computed(() => props.assets.slice(0, maxVisible))
@@ -89,21 +131,24 @@ function formatTime(iso: string) {
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">LeafAI</span>
-      <button class="icon-btn" title="搜索">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-      </button>
+      <span class="sidebar-title" :class="{ hidden: collapsed }">{{ collapsed ? '' : 'LeafAI' }}</span>
+      <div class="sidebar-header-actions">
+        <button v-if="!collapsed" class="icon-btn" title="搜索">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
       <button
-        v-for="item in navItems"
+        v-for="item in visibleNavItems"
         :key="item.id"
-        :class="['nav-item', { active: activeNav === item.id }]"
-        @click="activeNav = item.id"
+        :class="['nav-item', { active: activeNav === item.id, collapsed: collapsed }]"
+        :title="collapsed ? item.label : undefined"
+        @click="onNavClick(item)"
       >
         <svg v-if="item.icon === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -125,18 +170,37 @@ function formatTime(iso: string) {
           <circle cx="12" cy="5" r="1" />
           <circle cx="12" cy="19" r="1" />
         </svg>
-        <span class="nav-label">{{ item.label }}</span>
-        <svg v-if="item.hasArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-arrow">
+        <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+        <svg v-if="!collapsed && item.hasArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-arrow">
           <line x1="5" y1="12" x2="19" y2="12" />
           <polyline points="12 5 19 12 12 19" />
         </svg>
-        <svg v-if="item.hasExpand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-arrow">
+        <svg v-if="!collapsed && item.hasExpand" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-arrow">
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
     </nav>
 
-    <div class="sidebar-section">
+    <!-- 更多下拉菜单 -->
+    <div v-if="!collapsed && moreOpen" class="more-menu" @click.stop>
+      <button class="more-item" @click="onMoreSelect('my-points')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 6 2 18 2 18 9" />
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+          <rect x="6" y="14" width="12" height="8" rx="1" />
+        </svg>
+        <span>积分消耗记录</span>
+      </button>
+      <button class="more-item" @click="onMoreSelect('my-recharges')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23" />
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+        <span>充值记录</span>
+      </button>
+    </div>
+
+    <div v-if="!collapsed" class="sidebar-section">
       <div class="section-title">资产</div>
       <div v-if="assets.length === 0" class="asset-empty">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="asset-icon">
@@ -176,19 +240,25 @@ function formatTime(iso: string) {
     </div>
 
     <div class="sidebar-footer">
-      <button v-if="!isLoggedIn" class="footer-btn full" @click="emit('login')">
+      <button v-if="!isLoggedIn" class="footer-btn" :class="{ full: !collapsed, collapsed: collapsed }" :title="collapsed ? '登录/注册' : undefined" @click="emit('login')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
           <polyline points="10 17 15 12 10 7" />
           <line x1="15" y1="12" x2="3" y2="12" />
         </svg>
-        <span>登录/注册</span>
+        <span v-if="!collapsed">登录/注册</span>
       </button>
-      <div v-else class="footer-row">
+      <div v-else class="footer-row" :class="{ collapsed: collapsed }">
         <div class="footer-user">
-          <span class="footer-avatar">{{ (currentUser?.username || 'U')[0].toUpperCase() }}</span>
-          <span class="footer-username">{{ currentUser?.username }}</span>
+          <span class="footer-avatar" :title="currentUser?.username">{{ (currentUser?.username || 'U')[0].toUpperCase() }}</span>
+          <span v-if="!collapsed" class="footer-username">{{ currentUser?.username }}</span>
         </div>
+        <button v-if="currentUser?.is_superuser" class="icon-btn logout-btn" title="管理后台" @click="emit('admin')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <polyline points="9 12 11 14 15 10" />
+          </svg>
+        </button>
         <button class="icon-btn logout-btn" title="退出登录" @click="emit('logout')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -254,6 +324,40 @@ function formatTime(iso: string) {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding: 16px 8px 12px;
+  justify-content: center;
+}
+
+.sidebar-title.hidden {
+  display: none;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 8px 0;
+  gap: 0;
+}
+
+.sidebar.collapsed .sidebar-nav {
+  padding: 4px;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 8px;
+}
+
+.sidebar.collapsed .footer-row,
+.sidebar.collapsed .footer-btn {
+  justify-content: center;
+  padding: 8px 0;
 }
 
 .sidebar.overlay {
@@ -269,6 +373,12 @@ function formatTime(iso: string) {
   align-items: center;
   justify-content: space-between;
   padding: 16px 16px 12px;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .sidebar-title {
@@ -325,6 +435,32 @@ function formatTime(iso: string) {
 .nav-arrow {
   color: var(--color-text-secondary);
   flex-shrink: 0;
+}
+
+.more-menu {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  margin: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-white);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  text-align: left;
+  transition: background 0.15s;
+}
+.more-item:hover {
+  background: var(--color-hover);
 }
 
 .sidebar-section {

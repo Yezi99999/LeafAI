@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { api } from '../api'
 import type { ResolutionConfig } from '../api/index'
 
 const props = defineProps<{
   activeMode: 'chat' | 'image'
   resolutionConfig: ResolutionConfig[]
+  enabledFeatures?: Set<string>
   collapsed?: boolean
+  imageModels?: Array<{ id: number; label: string; promptMaxLength: number }>
+  freeQuotaImage?: number
+  pointsBalance?: number
 }>()
 
 const prompt = ref('')
@@ -31,12 +34,22 @@ const promptLength = computed(() => prompt.value.length)
 const promptExceeded = computed(() => promptLength.value > promptMaxLength.value)
 
 const modes = [
-  { id: 'chat', label: '对话', icon: 'chat' },
-  { id: 'image', label: '图片生成', icon: 'image' },
-  { id: 'video', label: '视频生成', icon: 'video' },
+  { id: 'chat', label: '对话', icon: 'chat', feature: 'chat' },
+  { id: 'image', label: '图片生成', icon: 'image', feature: 'image_generate' },
+  { id: 'video', label: '视频生成', icon: 'video', feature: 'video_generate' },
   { id: 'translate', label: '翻译', icon: 'translate' },
   { id: 'more', label: '更多', icon: 'more' },
-]
+] as const
+
+type ToolbarMode = (typeof modes)[number]
+
+// 功能开关关闭时隐藏对应模式按钮；无映射的（翻译/更多）始终显示
+const visibleModes = computed(() =>
+  modes.filter((m) => !('feature' in m) || (props.enabledFeatures?.has(m.feature!) ?? true))
+)
+
+// 对话模式被关闭时，隐藏对话输入相关内容（发送走 image 路径已在 App 侧保证）
+const chatHidden = computed(() => !(props.enabledFeatures?.has('chat') ?? true))
 
 const qualities = [
   { value: 'low', label: '低 (快速)' },
@@ -84,6 +97,14 @@ const qualityLabel = computed(() => {
   return selectedQuality.value.label
 })
 
+// 免费次数 / 积分提示
+const imageQuotaHint = computed(() => {
+  const q = props.freeQuotaImage ?? 0
+  if (q === -1) return '免费不限次数'
+  if (q > 0) return `免费次数剩余 ${q} 次`
+  return `消耗积分 · 余额 ${props.pointsBalance ?? 0}`
+})
+
 const emit = defineEmits<{
   send: [message: string]
   modeChange: [mode: string]
@@ -92,6 +113,7 @@ const emit = defineEmits<{
     resolution: string
     aspectRatio: string
     quality: string
+    modelId?: number | string
   }]
   expand: []
 }>()
@@ -114,6 +136,7 @@ function handleSend() {
       resolution: selectedResolution.value,
       aspectRatio: selectedRatio.value,
       quality: selectedQuality.value.value,
+      modelId: selectedModel.value.id,
     })
   } else {
     emit('send', prompt.value)
@@ -204,24 +227,29 @@ watch(
 
 onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
-  try {
-    const res = await api.getModels('image')
-    const items = res.data?.items || []
-    const remoteModels: ModelOption[] = items
-      .filter((m: any) => m.is_enabled)
-      .map((m: any) => ({ id: m.id, label: m.display_name || m.model_name, promptMaxLength: m.prompt_max_length || 5000 }))
-    models.value = [{ id: 'auto', label: 'AUTO', promptMaxLength: 5000 }, ...remoteModels]
-    if (selectedModel.value.id === 'auto') {
-      selectedModel.value = models.value[0]
-    }
-  } catch {
-    // keep default AUTO
-  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
 })
+
+// 模型列表由 App.vue 在登录后加载并下发，避免未登录时的鉴权 401 导致列表为空
+watch(
+  () => props.imageModels,
+  (items) => {
+    if (!items || !Array.isArray(items)) return
+    const remoteModels: ModelOption[] = items.map((m) => ({
+      id: m.id,
+      label: m.label,
+      promptMaxLength: m.promptMaxLength,
+    }))
+    models.value = [{ id: 'auto', label: 'AUTO', promptMaxLength: 5000 }, ...remoteModels]
+    if (selectedModel.value.id === 'auto') {
+      selectedModel.value = models.value[0]
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -344,6 +372,8 @@ onUnmounted(() => {
             </div>
           </Transition>
         </div>
+
+        <span class="image-quota-hint">{{ imageQuotaHint }}</span>
       </div>
         </Transition>
 
@@ -374,7 +404,7 @@ onUnmounted(() => {
 
       <div class="toolbar">
         <button
-          v-for="mode in modes"
+          v-for="mode in visibleModes"
           :key="mode.id"
           :class="['toolbar-btn', { active: activeMode === mode.id }]"
           @click="setActiveMode(mode.id)"
@@ -494,6 +524,7 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .option-selector {
@@ -640,6 +671,13 @@ onUnmounted(() => {
 }
 .prompt-counter.exceeded {
   color: #e74c3c;
+}
+
+.image-quota-hint {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .chevron {

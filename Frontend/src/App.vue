@@ -1,15 +1,64 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import MainContent from './components/MainContent.vue'
 import InputBar from './components/InputBar.vue'
 import AuthOverlay from './components/AuthOverlay.vue'
+import AdminLayout from './components/AdminLayout.vue'
 import { api, type ResolutionConfig } from './api/index'
+import ApiDocs from './components/ApiDocs.vue'
+import MyRecordView from './components/MyRecordView.vue'
 
 const BREAKPOINT = 800
-const sidebarVisible = ref(true)
+const SIDEBAR_WIDTH = 260
+const SIDEBAR_COLLAPSED_WIDTH = 64
+// 侧边栏状态：full(260) → collapsed(64) → hidden(完全隐藏)，由顶栏按钮循环切换
+type SidebarState = 'full' | 'collapsed' | 'hidden'
+const sidebarState = ref<SidebarState>('full')
 const isMobile = ref(false)
 const activeMode = ref<'chat' | 'image'>('chat')
+
+// 主视图：默认显示原工作台（MainContent + InputBar）；docs 为 API 文档，
+// my-points / my-recharges 为「更多」里的积分/充值记录
+type View = 'chat' | 'image' | 'docs' | 'my-points' | 'my-recharges'
+const view = ref<View>('chat')
+
+function onNavigate(navId: string) {
+  if (navId === 'new-chat') {
+    view.value = inputEnabledModes.value.includes('chat') ? 'chat' : 'image'
+    activeMode.value = 'chat'
+  } else if (navId === 'workspace') {
+    // 「AI工作台」默认展示对话工作台
+    view.value = 'chat'
+  } else if (navId === 'skills') {
+    showToast('技能·连接器·伙伴 暂未开放', 'info')
+  } else if (navId === 'api') {
+    view.value = 'docs'
+  } else if (navId === 'my-points' || navId === 'my-recharges') {
+    view.value = navId
+  }
+}
+
+// 当前用户可用的功能：来自 C 端 /config/features（总开关+白名单）
+const enabledFeatures = ref<Set<string>>(new Set())
+const chatEnabled = computed(() => enabledFeatures.value.has('chat'))
+const imageEnabled = computed(() => enabledFeatures.value.has('image_generate'))
+const inputEnabledModes = computed(() => {
+  const set: ('chat' | 'image')[] = []
+  if (chatEnabled.value) set.push('chat')
+  if (imageEnabled.value) set.push('image')
+  return set
+})
+
+// 功能开关变化后，确保 activeMode 落在可用范围
+watch([chatEnabled, imageEnabled], () => {
+  const available = inputEnabledModes.value
+  if (available.includes(activeMode.value)) return
+  activeMode.value = available[0] ?? 'chat'
+})
+
+const sidebarVisible = computed(() => sidebarState.value !== 'hidden')
+const sidebarCollapsed = computed(() => (isMobile.value ? false : sidebarState.value === 'collapsed'))
 
 interface Message {
   id: number
@@ -46,6 +95,7 @@ const assets = ref<Asset[]>([])
 let msgIdCounter = ref(4)
 
 const resolutionConfig = ref<ResolutionConfig[]>([])
+const imageModels = ref<Array<{ id: number; label: string; promptMaxLength: number }>>([])
 
 interface UserInfo {
   id: number
@@ -54,13 +104,27 @@ interface UserInfo {
   email: string | null
   is_active: boolean
   is_superuser: boolean
+  role: string
+  points_balance: number
+  free_quota: Record<string, number>
 }
 
 const isLoggedIn = ref(false)
 const currentUser = ref<UserInfo | null>(null)
 const showAuth = ref(false)
+const showAdmin = ref(false)
 const inputCollapsed = ref(false)
 const chatSessionId = ref<string | null>(null)
+const toast = ref<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(text: string, type: 'success' | 'error' | 'info' = 'info') {
+  toast.value = { type, text }
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.value = null
+  }, 3500)
+}
 
 function genId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
@@ -72,16 +136,41 @@ function genId() {
 }
 
 function checkMobile() {
-  isMobile.value = window.innerWidth < BREAKPOINT
-  if (isMobile.value) sidebarVisible.value = false
+  const mobile = window.innerWidth < BREAKPOINT
+  if (mobile !== isMobile.value) {
+    isMobile.value = mobile
+    // 跨断点时同步状态：进入窄屏关闭覆盖层，回到宽屏恢复完整
+    sidebarState.value = mobile ? 'hidden' : 'full'
+  }
 }
 
 function toggleSidebar() {
-  sidebarVisible.value = !sidebarVisible.value
+  // 顶栏按钮：桌面端循环 full → collapsed → hidden → full；移动端仅 show/hide 覆盖层
+  if (isMobile.value) {
+    sidebarState.value = sidebarState.value === 'hidden' ? 'full' : 'hidden'
+    return
+  }
+  if (sidebarState.value === 'full') sidebarState.value = 'collapsed'
+  else if (sidebarState.value === 'collapsed') sidebarState.value = 'hidden'
+  else sidebarState.value = 'full'
 }
 
+// InputBar 的左侧偏移：仅桌面端且侧边栏可见时按其宽度取值
+const sidebarOffset = computed(() => {
+  if (isMobile.value || !sidebarVisible.value) return 0
+  return sidebarCollapsed.value ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH
+})
+
 function closeSidebar() {
-  sidebarVisible.value = false
+  sidebarState.value = 'hidden'
+}
+
+function openAdmin() {
+  if (currentUser.value?.is_superuser) showAdmin.value = true
+}
+
+function closeAdmin() {
+  showAdmin.value = false
 }
 
 async function handleSend(text: string) {
@@ -151,6 +240,7 @@ async function handleImageGenerate(params: {
   resolution: string
   aspectRatio: string
   quality: string
+  modelId?: number | string
 }) {
   if (!isLoggedIn.value) {
     showAuth.value = true
@@ -159,8 +249,15 @@ async function handleImageGenerate(params: {
   const nowIso = new Date().toISOString()
   let task: Asset
   try {
+    // 图片模型：优先使用用户所选，缺省回退到已加载列表中的首个
+    let mid: number
+    if (typeof params.modelId === 'number') {
+      mid = params.modelId
+    } else {
+      mid = imageModels.value[0]?.id ?? 1
+    }
     const res = await api.generateImage({
-      model_id: 1,
+      model_id: mid,
       prompt: params.prompt,
       resolution: params.resolution,
       aspect_ratio: params.aspectRatio,
@@ -198,6 +295,9 @@ async function handleImageGenerate(params: {
     }
     assets.value.push(task)
     sortAssets()
+    if (e.message && e.message.includes('积分不足')) {
+      showToast(e.message, 'error')
+    }
   }
 }
 
@@ -232,6 +332,8 @@ function pollTask(taskId: string) {
 
     if (asset.status === 'success') {
       clearInterval(timer)
+      // 消耗积分/免费次数后刷新余额，保持「余额」提示准确
+      refreshCurrentUser()
       const images = (data.result || {}).images || []
       asset.files = images
       if (sysMsg) {
@@ -252,6 +354,7 @@ function pollTask(taskId: string) {
 function handleModeChange(mode: string) {
   if (mode === 'chat' || mode === 'image') {
     activeMode.value = mode
+    view.value = mode
   }
 }
 
@@ -270,11 +373,16 @@ async function handleLogin(username: string, password: string) {
       email: null,
       is_active: true,
       is_superuser: false,
+      role: 'user',
+      points_balance: 0,
+      free_quota: {},
     }
     isLoggedIn.value = true
   }
   showAuth.value = false
+  await loadFeatures()
   await loadAssets()
+  await loadImageModels()
   await loadChatHistory()
 }
 
@@ -293,11 +401,58 @@ async function handleRegister(username: string, password: string, email?: string
       email: null,
       is_active: true,
       is_superuser: false,
+      role: 'user',
+      points_balance: 0,
+      free_quota: {},
     }
     isLoggedIn.value = true
   }
   showAuth.value = false
+  await loadFeatures()
   await loadAssets()
+  await loadImageModels()
+  await loadChatHistory()
+}
+
+async function loadFeatures() {
+  if (!isLoggedIn.value) {
+    enabledFeatures.value = new Set()
+    return
+  }
+  try {
+    const res = await api.getFeatures()
+    enabledFeatures.value = new Set(res.data?.items || [])
+  } catch {
+    // 接口失败时保持全量可用，避免误隐藏
+    enabledFeatures.value = new Set(['chat', 'image_generate'])
+  }
+}
+
+// 拉取最新用户信息（余额/免费配额），用于消耗积分后的实时刷新
+async function refreshCurrentUser() {
+  if (!isLoggedIn.value) return
+  try {
+    const me = await api.getMe()
+    currentUser.value = me.data as UserInfo
+  } catch {
+    // ignore
+  }
+}
+
+async function loadImageModels() {
+  try {
+    const res = await api.getModels('image')
+    const items = res.data?.items || []
+    imageModels.value = items
+      .filter((m: any) => m.is_enabled)
+      .map((m: any) => ({
+        id: m.id,
+        label: m.display_name || m.model_name,
+        promptMaxLength: m.prompt_max_length || 5000,
+      }))
+  } catch {
+    imageModels.value = []
+  }
 }
 
 function handleLogout() {
@@ -306,6 +461,7 @@ function handleLogout() {
   currentUser.value = null
   showAuth.value = false
   assets.value = []
+  imageModels.value = []
   chatSessionId.value = null
   messages.value = [{
     id: 1,
@@ -323,6 +479,7 @@ async function restoreSession() {
     currentUser.value = res.data
     isLoggedIn.value = true
     await loadAssets()
+    await loadImageModels()
     await loadChatHistory()
   } catch {
     localStorage.removeItem('leafai_token')
@@ -339,12 +496,12 @@ function formatMsgTime(iso: string): string {
 async function loadChatHistory() {
   try {
     const res = await api.listChatSessions()
-    const sessions = res.data?.sessions || []
+    const sessions = res.data?.items || []
     if (sessions.length === 0) return
     const latest = sessions[0]
     chatSessionId.value = latest.id
     const msgs = await api.getChatSessionMessages(latest.id)
-    const list = (msgs.data || [])
+    const list = (msgs.data?.items || [])
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
       .map((m: any) => ({
         id: msgIdCounter.value++,
@@ -363,7 +520,7 @@ async function loadChatHistory() {
 async function loadAssets() {
   try {
     const res = await api.listTasks({ page_size: 50 })
-    const tasks = res.data?.tasks || []
+    const tasks = res.data?.items || []
     assets.value = tasks.map((t: any) => {
       const category = t.category || ''
       let type: Asset['type'] = 'image'
@@ -409,11 +566,19 @@ const imageRecords = computed(() =>
     }))
 )
 
+function onWindowFocus() {
+  // 切回页面时刷新余额/免费配额，后台管理充值后切回即同步
+  refreshCurrentUser()
+}
+
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  window.addEventListener('focus', onWindowFocus)
+  document.addEventListener('visibilitychange', onWindowFocus)
 
   await restoreSession()
+  await loadFeatures()
 
   try {
     const res = await api.getResolutions()
@@ -426,6 +591,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('focus', onWindowFocus)
+  document.removeEventListener('visibilitychange', onWindowFocus)
 })
 </script>
 
@@ -435,6 +602,12 @@ onUnmounted(() => {
     @login="handleLogin"
     @register="handleRegister"
     @close="showAuth = false"
+  />
+
+  <AdminLayout
+    v-if="showAdmin"
+    :username="currentUser?.username || ''"
+    @exit="closeAdmin"
   />
 
   <Transition name="overlay-fade">
@@ -447,15 +620,21 @@ onUnmounted(() => {
 
   <Sidebar
     v-show="sidebarVisible"
-    :class="{ overlay: isMobile }"
+    :class="{ overlay: isMobile, collapsed: sidebarCollapsed }"
     :assets="assets"
     :is-logged-in="isLoggedIn"
     :current-user="currentUser"
+    :enabled-features="enabledFeatures"
+    :collapsed="sidebarCollapsed"
+    :current-view="view"
     @login="showAuth = true"
     @logout="handleLogout"
+    @admin="openAdmin"
+    @navigate="onNavigate"
   />
 
   <MainContent
+    v-if="view === 'chat' || view === 'image'"
     :sidebar-visible="sidebarVisible"
     :mode="activeMode"
     :messages="messages"
@@ -465,18 +644,31 @@ onUnmounted(() => {
     @expand-input="inputCollapsed = false"
   />
 
+  <ApiDocs v-else-if="view === 'docs'" />
+  <MyRecordView v-else-if="view === 'my-points'" title="积分消耗记录" direction="out" empty-text="暂无积分消耗记录" />
+  <MyRecordView v-else-if="view === 'my-recharges'" title="充值记录" direction="in" empty-text="暂无充值记录" />
+
   <InputBar
+    v-if="view === 'chat' || view === 'image'"
     :style="{
-      left: isMobile ? '0' : sidebarVisible ? 'var(--sidebar-width)' : '0',
+      left: sidebarOffset + 'px',
     }"
     :active-mode="activeMode"
+    :enabled-features="enabledFeatures"
     :resolution-config="resolutionConfig"
+    :image-models="imageModels"
+    :free-quota-image="currentUser?.free_quota?.image ?? 0"
+    :points-balance="currentUser?.points_balance ?? 0"
     :collapsed="inputCollapsed"
     @send="handleSend"
     @mode-change="handleModeChange"
     @image-generate="handleImageGenerate"
     @expand="inputCollapsed = false"
   />
+
+  <Transition name="toast">
+    <div v-if="toast" class="app-toast" :class="toast.type">{{ toast.text }}</div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -494,5 +686,35 @@ onUnmounted(() => {
 .overlay-fade-enter-from,
 .overlay-fade-leave-to {
   opacity: 0;
+}
+
+.app-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  max-width: 80vw;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  color: #fff;
+  background: #1f2937;
+}
+.app-toast.error {
+  background: #dc2626;
+}
+.app-toast.success {
+  background: #059669;
+}
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s, transform 0.25s;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
 }
 </style>

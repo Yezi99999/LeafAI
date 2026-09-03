@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { api, type TaskStatusResult, type ResolutionConfig } from '../api/index'
+import { api, type ResolutionConfig } from '../api/index'
 
 const prompt = ref('')
 const selectedResolution = ref('')
