@@ -12,7 +12,7 @@
 
 | 组件 | 版本建议 |
 | ---- | -------- |
-| Python | ≥ 3.11 |
+| Python | ≥ 3.12 |
 | Node.js | ≥ 18 |
 | PostgreSQL | ≥ 13（需启用 `uuid-ossp` / `pgcrypto`，用于 token 默认值） |
 | uv（可选）| 包管理器 |
@@ -49,12 +49,36 @@ ADMIN_PASSWORD=请设置强密码            # 可选，管理员密码
 
 > 图片服务采用通用的 OpenAI 兼容参数（`/images/generations`），任何具备相同参数的图片服务均可通过 `IMAGE_API_KEY` / `IMAGE_BASE_URL` 使用。
 
-### 2. 初始化数据库并设置管理员
+### 2. 安装后端依赖
 
-在 `Backend/` 目录下执行（首次部署）：
+在 `Backend/` 目录下安装 Python 依赖（`asyncpg`、`fastapi` 等均由 `pyproject.toml` 管理）。推荐用 **uv**（首选，速度快）：
 
 ```bash
+cd Backend
+uv sync                 # 按 uv.lock 安装，自动创建 .venv
+```
+
+或用标准 `venv + pip`：
+
+```bash
+cd Backend
+python3 -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e .               # 或：pip install -r <根据 pyproject 依赖>
+```
+
+> 若系统 `python3` 提示 `No module named 'asyncpg'`，说明未按本步安装依赖，请先创建虚拟环境并安装，再继续。
+
+### 3. 初始化数据库并设置管理员
+
+在 `Backend/` 目录下执行（首次部署，请先激活虚拟环境，或用 `.venv/bin/python init_db.py`）：
+
+```bash
+# 激活虚拟环境后：
 python init_db.py --admin-username "$ADMIN_USERNAME" --admin-password "$ADMIN_PASSWORD"
+
+# 或未激活时直接用虚拟环境解释器：
+.venv/bin/python init_db.py --admin-username "$ADMIN_USERNAME" --admin-password "$ADMIN_PASSWORD"
 ```
 
 脚本会一次性完成：
@@ -79,31 +103,32 @@ python init_db.py --admin-username admin --admin-password '新密码' --reset-ad
 
 > ⚠️ 生产环境请务必通过 `--admin-username/--admin-password` 或环境变量指定强密码；`admin/admin123` 仅为本地兜底，不建议用于生产。
 
-### 3. 数据库迁移
+> 💡 也可跳过 init_db.py，直接启动后端：后端会在启动时自动 `create_all` 建表并预置功能开关，但**不会**创建管理员账号，因此仍需使用 `init_db.py` 完成管理员初始化。
+
+### 4. 数据库迁移
 
 后续业务模型变更通过 Alembic 迁移（`Backend/alembic/`）。升级到最新结构：
 
 ```bash
 cd Backend
-python -m alembic upgrade head
+.venv/bin/python -m alembic upgrade head
 ```
 
-### 4. 启动后端
+### 5. 启动后端
 
 ```bash
 cd Backend
-.venv\Scripts\activate          # Windows；Linux/macOS: source .venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 后端启动时若表缺失会自动 `create_all`，并预置核心功能开关。健康检查：`GET http://localhost:8000/health`。
 
 开发模式（热重载）：
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 5. 启动前端
+### 6. 启动前端
 
 ```bash
 cd Frontend
