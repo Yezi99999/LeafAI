@@ -10,7 +10,7 @@ from app.tasks.workers import execute_image_task
 from app.api.v1.deps import get_current_user
 from app.services.toggle_service import ensure_enabled
 from app.services.billing import resolve_charge, PLAN_FREE, PLAN_QUOTA, PLAN_POINTS, CHARGE_PLAN_KEY, CHARGE_POINTS_KEY
-from app.services import points_service
+from app.services import points_service, upload_service
 import uuid
 
 router = APIRouter(prefix="/image", tags=["图片生成"])
@@ -27,6 +27,11 @@ async def generate_image(
     req.validate_size()
     task_id = uuid.uuid4().hex[:16]
     size = req.get_size()
+
+    # 参考图数量上限（后台可配）
+    upload_cfg = await upload_service.get_upload_config(db)
+    if req.image and len(req.image) > upload_cfg["max_count"]:
+        raise HTTPException(status_code=400, detail=f"参考图数量超过限制({upload_cfg['max_count']}张)")
 
     model = await db.get(AIModel, req.model_id)
     if model is None or not model.is_enabled:

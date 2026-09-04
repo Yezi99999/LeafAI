@@ -13,8 +13,9 @@ function getToken(): string | null {
 }
 
 async function request<T = any>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  const isForm = options?.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isForm ? {} : { 'Content-Type': 'application/json' }),
     ...(options?.headers as Record<string, string>),
   }
   const token = getToken()
@@ -639,6 +640,36 @@ export const adminApiConfig = {
       method: 'PUT',
       body: JSON.stringify({ value }),
     })
+  },
+  set(key: string, value: unknown): Promise<ApiResponse<{ key: string; value: unknown }>> {
+    return request(`/admin/configs/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    })
+  },
+}
+
+// ===== 图片上传（可作独立图床） =====
+export interface UploadConfig {
+  max_size_mb: number
+  max_count: number
+}
+
+export interface UploadResult {
+  url: string
+  file_name: string
+  size: number
+  content_type: string
+}
+
+export const apiUpload = {
+  getConfig(): Promise<ApiResponse<UploadConfig>> {
+    return request('/upload/image/config')
+  },
+  uploadImage(file: File): Promise<ApiResponse<UploadResult>> {
+    const form = new FormData()
+    form.append('file', file)
+    return request('/upload/image', { method: 'POST', body: form })
   },
 }
 

@@ -241,6 +241,7 @@ async function handleImageGenerate(params: {
   aspectRatio: string
   quality: string
   modelId?: number | string
+  images?: string[]
 }) {
   if (!isLoggedIn.value) {
     showAuth.value = true
@@ -262,6 +263,7 @@ async function handleImageGenerate(params: {
       resolution: params.resolution,
       aspect_ratio: params.aspectRatio,
       quality: params.quality,
+      image: params.images && params.images.length ? params.images : undefined,
     })
 
     const taskId = res.data.task_id

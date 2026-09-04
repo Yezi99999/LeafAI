@@ -13,6 +13,21 @@ const password = ref('')
 const email = ref('')
 const error = ref('')
 const loading = ref(false)
+// 记录本次鼠标按下是否发生在弹窗外部（遮罩层）上，用于区分「点击外部关闭」与「拖动选择误触」
+const pressOutside = ref(false)
+
+function onOverlayPointerDown() {
+  pressOutside.value = true
+}
+
+function onOverlayClick() {
+  // 仅当按下起点在遮罩层上才视为「点击外部关闭」；
+  // 从框内拖动到框外松开的 click 不影响关闭，避免拖动选择文本时误关弹窗
+  if (pressOutside.value) {
+    emit('close')
+  }
+  pressOutside.value = false
+}
 
 async function handleSubmit() {
   error.value = ''
@@ -45,8 +60,12 @@ function toggleMode() {
 </script>
 
 <template>
-  <div class="auth-overlay" @click.self="emit('close')">
-    <div class="auth-card">
+  <div
+    class="auth-overlay"
+    @pointerdown.self="onOverlayPointerDown"
+    @click="onOverlayClick"
+  >
+    <div class="auth-card" @pointerdown="pressOutside = false">
       <div class="auth-header">
         <h2 class="auth-title">{{ isRegister ? '注册' : '登录' }}</h2>
         <p class="auth-subtitle">

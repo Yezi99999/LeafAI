@@ -45,6 +45,9 @@ DEEPSEEK_API_KEY=你的对话服务密钥      # 对话服务（如 deepseek）
 JWT_SECRET=请设置为随机的长字符串      # 生产必填，命令：python -c "import secrets; print(secrets.token_urlsafe(48))"
 ADMIN_USERNAME=admin                  # 可选，管理员用户名
 ADMIN_PASSWORD=请设置强密码            # 可选，管理员密码
+# ----- 以下为可选项 -----
+FILE_STORAGE_PATH=./storage           # 图片上传落盘目录（图床文件）
+PUBLIC_BASE_URL=                      # 对外 Base URL（可选），留空则按请求动态拼接
 ```
 
 > 图片服务采用通用的 OpenAI 兼容参数（`/images/generations`），任何具备相同参数的图片服务均可通过 `IMAGE_API_KEY` / `IMAGE_BASE_URL` 使用。
@@ -144,6 +147,19 @@ npm run build      # 生产构建
 
 生产部署前端构建产物（`Frontend/dist`）到任意静态服务器（Nginx/Caddy 等），并把 `/api`（含 SSE）反向代理到后端。
 
+> 图片上传文件默认落盘到后端 `FILE_STORAGE_PATH`（默认 `./storage`）下的 `uploads/`，经 `/static/uploads/<file_name>` 对外公开访问。若通过反向代理对外提供服务，需同时代理 `/static` 到后端。
+
+#### 图片上传（独立图床）
+
+系统提供独立的上传接口，图片会**单独存储**并返回公开的 OSS 连接（URL），既可作为图片生成的参考图，也可作为通用图床使用：
+
+- `POST /api/v1/upload/image`：`multipart/form-data`（字段 `file`），需 JWT，支持 `jpeg/png/webp/gif/bmp`，单张不超过限制，返回 `data.url` 为公开访问地址。
+- `GET /api/v1/upload/image/config`：返回当前上传限制 `{ max_size_mb, max_count }`。
+
+单图大小、单次数量上限由管理后台「上传设置」维护（存于 `SystemConfig`：`upload_max_size_mb` / `upload_max_count`），同时对图床接口与工作台上传生效；图片生成提交参考图时会校验数量上限。
+
+详细字段与 curl 示例见 [`docs/api-integration.md`](docs/api-integration.md#6-图片上传可作为独立图床)。
+
 ## 四、默认账号与首登
 
 初始化后会创建管理员：
@@ -151,7 +167,7 @@ npm run build      # 生产构建
 - 用户名：`ADMIN_USERNAME`（未指定时为 `admin`）
 - 密码：`ADMIN_PASSWORD`（未指定时为 `admin123`）
 
-使用管理员登录前端，进入「管理后台」可进行模型管理、功能开关、积分费率、充值管理、通知群发、调用记录、操作审计、报表等操作。**首次登录后请立即修改管理员密码。**
+使用管理员登录前端，进入「管理后台」可进行模型管理、功能开关、积分费率、充值管理、通知群发、调用记录、操作审计、上传设置（单图大小/数量限制）、报表等操作。**首次登录后请立即修改管理员密码。**
 
 ## 五、常见问题
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
@@ -34,6 +35,7 @@ from app.api.v1.admin_records import router as admin_records_router
 from app.api.v1.points import router as points_router
 from app.api.v1.notify import router as notify_router
 from app.api.v1.config import router as config_router
+from app.api.v1.upload import router as upload_router
 from app.api.v1.auth import router as auth_router
 
 from app.services.toggle_service import ensure_defaults
@@ -159,7 +161,17 @@ app.include_router(admin_records_router, prefix=api_prefix)
 app.include_router(points_router, prefix=api_prefix)
 app.include_router(notify_router, prefix=api_prefix)
 app.include_router(config_router, prefix=api_prefix)
+app.include_router(upload_router, prefix=api_prefix)
 app.include_router(auth_router, prefix=api_prefix)
+
+# 本地存储静态目录（上传图片等对外公开访问）
+try:
+    from pathlib import Path as _P
+    _storage = _P(settings.FILE_STORAGE_PATH)
+    _storage.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(_storage)), name="static")
+except Exception as e:
+    print(f"[warn] 静态存储目录挂载失败: {e}")
 
 
 @app.get("/")

@@ -8,6 +8,7 @@ import NotifyManage from './NotifyManage.vue'
 import Dashboard from './Dashboard.vue'
 import AuditManage from './AuditManage.vue'
 import ApiConfig from './ApiConfig.vue'
+import UploadConfig from './UploadConfig.vue'
 import CallRecordsManage from './CallRecordsManage.vue'
 
 const props = defineProps<{
@@ -18,7 +19,7 @@ const emit = defineEmits<{
   exit: []
 }>()
 
-type ViewKey = 'dashboard' | 'users' | 'models' | 'features' | 'points' | 'notify' | 'records' | 'audit' | 'config'
+type ViewKey = 'dashboard' | 'users' | 'models' | 'features' | 'points' | 'notify' | 'records' | 'audit' | 'config' | 'upload'
 const activeView = ref<ViewKey>('dashboard')
 
 const navItems: Array<{ id: ViewKey; label: string }> = [
@@ -30,6 +31,7 @@ const navItems: Array<{ id: ViewKey; label: string }> = [
   { id: 'points', label: '积分管理' },
   { id: 'notify', label: '通知管理' },
   { id: 'audit', label: '操作审计' },
+  { id: 'upload', label: '上传设置' },
   { id: 'config', label: '接入文档' },
 ]
 </script>
@@ -69,6 +71,7 @@ const navItems: Array<{ id: ViewKey; label: string }> = [
       <NotifyManage v-else-if="activeView === 'notify'" />
       <CallRecordsManage v-else-if="activeView === 'records'" />
       <AuditManage v-else-if="activeView === 'audit'" />
+      <UploadConfig v-else-if="activeView === 'upload'" />
       <ApiConfig v-else-if="activeView === 'config'" />
     </main>
   </div>

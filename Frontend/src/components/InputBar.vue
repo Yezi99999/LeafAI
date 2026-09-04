@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { apiUpload } from '../api'
 import type { ResolutionConfig } from '../api/index'
 
 const props = defineProps<{
@@ -19,6 +20,63 @@ const showQualityDropdown = ref(false)
 const modelSelectorRef = ref<HTMLElement | null>(null)
 const ratioSelectorRef = ref<HTMLElement | null>(null)
 const qualitySelectorRef = ref<HTMLElement | null>(null)
+
+// 图片模式：参考图上传（40x60px 堆叠卡片预览，走后端存储接口拿 URL）
+const uploadedImages = ref<string[]>([])
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const uploading = ref(false)
+const uploadError = ref('')
+const uploadMaxMb = ref(5)
+const uploadMaxCount = ref(6)
+
+onMounted(async () => {
+  document.addEventListener('click', onDocumentClick)
+  try {
+    const res = await apiUpload.getConfig()
+    uploadMaxMb.value = res.data?.max_size_mb ?? 5
+    uploadMaxCount.value = res.data?.max_count ?? 6
+  } catch {
+    // 未登录或接口不可用时使用默认限制
+  }
+})
+
+function triggerUpload() {
+  fileInputRef.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = '' // 允许重复选择同一文件
+  if (!files.length) return
+  if (uploading.value) return
+  uploading.value = true
+  uploadError.value = ''
+  try {
+    const remaining = uploadMaxCount.value - uploadedImages.value.length
+    const batch = files.slice(0, Math.max(0, remaining))
+    for (const file of batch) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > uploadMaxMb.value * 1024 * 1024) {
+        uploadError.value = `单张图片不能超过 ${uploadMaxMb.value}MB`
+        continue
+      }
+      try {
+        const res = await apiUpload.uploadImage(file)
+        if (res.data?.url) uploadedImages.value.push(res.data.url)
+      } catch (err: any) {
+        uploadError.value = err.message || '上传失败'
+      }
+    }
+  } finally {
+    uploading.value = false
+  }
+}
+
+function removeImage(idx: number) {
+  uploadedImages.value.splice(idx, 1)
+  uploadError.value = ''
+}
 
 interface ModelOption {
   id: number | string
@@ -41,15 +99,10 @@ const modes = [
   { id: 'more', label: '更多', icon: 'more' },
 ] as const
 
-type ToolbarMode = (typeof modes)[number]
-
 // 功能开关关闭时隐藏对应模式按钮；无映射的（翻译/更多）始终显示
 const visibleModes = computed(() =>
   modes.filter((m) => !('feature' in m) || (props.enabledFeatures?.has(m.feature!) ?? true))
 )
-
-// 对话模式被关闭时，隐藏对话输入相关内容（发送走 image 路径已在 App 侧保证）
-const chatHidden = computed(() => !(props.enabledFeatures?.has('chat') ?? true))
 
 const qualities = [
   { value: 'low', label: '低 (快速)' },
@@ -114,6 +167,7 @@ const emit = defineEmits<{
     aspectRatio: string
     quality: string
     modelId?: number | string
+    images?: string[]
   }]
   expand: []
 }>()
@@ -137,7 +191,9 @@ function handleSend() {
       aspectRatio: selectedRatio.value,
       quality: selectedQuality.value.value,
       modelId: selectedModel.value.id,
+      images: [...uploadedImages.value],
     })
+    uploadedImages.value = []
   } else {
     emit('send', prompt.value)
   }
@@ -224,10 +280,6 @@ watch(
   },
   { immediate: true }
 )
-
-onMounted(async () => {
-  document.addEventListener('click', onDocumentClick)
-})
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
@@ -373,7 +425,32 @@ watch(
           </Transition>
         </div>
 
+        <button class="upload-badge" type="button" :disabled="uploading" @click="triggerUpload">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>{{ uploading ? '上传中...' : `图片${uploadedImages.length}/${uploadMaxCount}` }}</span>
+        </button>
+        <input ref="fileInputRef" type="file" accept="image/*" multiple style="display: none" @change="onFileChange" />
+
         <span class="image-quota-hint">{{ imageQuotaHint }}</span>
+
+        <div v-if="uploadedImages.length" class="image-stack">
+          <TransitionGroup name="stack" tag="div" class="image-stack-inner">
+            <div v-for="(img, i) in uploadedImages" :key="img" class="image-stack-card">
+              <img :src="img" alt="参考图" />
+              <button class="stack-remove" type="button" @click="removeImage(i)">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </TransitionGroup>
+        </div>
+        <div v-if="uploadError" class="upload-error-hint">{{ uploadError }}</div>
       </div>
         </Transition>
 
@@ -678,6 +755,99 @@ watch(
   margin-bottom: 4px;
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.upload-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--color-accent);
+  padding: 5px 12px;
+  border: 1px dashed var(--color-accent);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.upload-badge:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.upload-badge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.upload-error-hint {
+  font-size: 12px;
+  color: #e74c3c;
+  margin-top: 2px;
+}
+
+/* 40x60px 参考图堆叠卡片 */
+.image-stack {
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+.image-stack-inner {
+  display: flex;
+}
+.image-stack-card {
+  position: relative;
+  width: 40px;
+  height: 60px;
+  flex-shrink: 0;
+  margin-left: -10px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1.5px solid var(--color-bg-white);
+  background: var(--color-bg-page);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  transition: margin-left 0.25s;
+}
+.image-stack-card:first-child {
+  margin-left: 0;
+}
+.image-stack-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.stack-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.image-stack-card:hover .stack-remove {
+  opacity: 1;
+}
+
+.stack-enter-active {
+  transition: all 0.25s;
+}
+.stack-leave-active {
+  transition: all 0.2s;
+}
+.stack-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.stack-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
 }
 
 .chevron {
