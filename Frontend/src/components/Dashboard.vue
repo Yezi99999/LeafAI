@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { LineChart, BarChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { adminApiAnalytics } from '../api'
+
+echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
+
+type EChartsInst = ReturnType<typeof echarts.init>
 
 const overview = ref({ total_users: 0, today_active_users: 0, cumulative_points_consumed: 0, weekly_success_rate: 0 })
 const loading = ref(true)
@@ -14,7 +21,7 @@ const pointsRef = ref<HTMLElement | null>(null)
 const perfRef = ref<HTMLElement | null>(null)
 const servicesRef = ref<HTMLElement | null>(null)
 
-let charts: echarts.ECharts[] = []
+let charts: EChartsInst[] = []
 let toastRef: ReturnType<typeof setTimeout> | null = null
 
 function disposes() {

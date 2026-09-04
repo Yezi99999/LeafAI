@@ -11,4 +11,18 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('/echarts/') || id.includes('zrender')) return 'echarts'
+            if (id.includes('/vue/') || id.includes('/@vue/')) return 'vue-vendor'
+            return 'vendor'
+          }
+        },
+      },
+    },
+  },
 })
