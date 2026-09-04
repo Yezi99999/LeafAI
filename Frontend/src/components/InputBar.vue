@@ -14,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const prompt = ref('')
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const showModelDropdown = ref(false)
 const showRatioDropdown = ref(false)
 const showQualityDropdown = ref(false)
@@ -48,8 +49,28 @@ async function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files || [])
   input.value = '' // 允许重复选择同一文件
-  if (!files.length) return
-  if (uploading.value) return
+  if (files.length) await processFiles(files)
+}
+
+const dragOver = ref(false)
+
+function onDragEnter(e: DragEvent) {
+  if (uploading.value || !(e.dataTransfer?.types || []).includes('Files')) return
+  dragOver.value = true
+}
+
+function onDragLeave() {
+  dragOver.value = false
+}
+
+async function onDrop(e: DragEvent) {
+  dragOver.value = false
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (files.length) await processFiles(files)
+}
+
+async function processFiles(files: File[]) {
+  if (!files.length || uploading.value) return
   uploading.value = true
   uploadError.value = ''
   try {
@@ -77,6 +98,16 @@ function removeImage(idx: number) {
   uploadedImages.value.splice(idx, 1)
   uploadError.value = ''
 }
+
+// 供外部（重做）填充输入框
+function setPrompt(text: string) {
+  prompt.value = text
+  nextTick(() => {
+    textareaRef.value?.focus()
+  })
+}
+
+defineExpose({ setPrompt })
 
 interface ModelOption {
   id: number | string
@@ -425,15 +456,24 @@ watch(
           </Transition>
         </div>
 
-        <button class="upload-badge" type="button" :disabled="uploading" @click="triggerUpload">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span>{{ uploading ? '上传中...' : `图片${uploadedImages.length}/${uploadMaxCount}` }}</span>
-        </button>
-        <input ref="fileInputRef" type="file" accept="image/*" multiple style="display: none" @change="onFileChange" />
+        <div
+          class="upload-dropper"
+          :class="{ dragover: dragOver }"
+          @dragover.prevent
+          @dragenter.prevent="onDragEnter"
+          @dragleave="onDragLeave"
+          @drop.prevent="onDrop"
+        >
+          <button class="upload-badge" type="button" :disabled="uploading" @click="triggerUpload">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>{{ uploading ? '上传中...' : `图片${uploadedImages.length}/${uploadMaxCount}` }}</span>
+          </button>
+          <input ref="fileInputRef" type="file" accept="image/*" multiple style="display: none" @change="onFileChange" />
+        </div>
 
         <span class="image-quota-hint">{{ imageQuotaHint }}</span>
 
@@ -777,6 +817,20 @@ watch(
 .upload-badge:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.upload-dropper {
+  position: relative;
+  display: inline-flex;
+  border-radius: 10px;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.upload-dropper.dragover {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+.upload-dropper .upload-badge {
+  pointer-events: auto;
 }
 
 .upload-error-hint {

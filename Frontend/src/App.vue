@@ -23,6 +23,14 @@ const activeMode = ref<'chat' | 'image'>('chat')
 type View = 'chat' | 'image' | 'docs' | 'my-points' | 'my-recharges'
 const view = ref<View>('chat')
 
+// 「重做」：将历史图片记录提示词回填到输入框
+const inputBarRef = ref<{ setPrompt: (t: string) => void } | null>(null)
+function handleRedo(promptText: string) {
+  view.value = 'chat'
+  activeMode.value = 'image'
+  inputBarRef.value?.setPrompt(promptText)
+}
+
 function onNavigate(navId: string) {
   if (navId === 'new-chat') {
     view.value = inputEnabledModes.value.includes('chat') ? 'chat' : 'image'
@@ -644,6 +652,7 @@ onUnmounted(() => {
     @toggle-sidebar="toggleSidebar"
     @collapse-input="inputCollapsed = true"
     @expand-input="inputCollapsed = false"
+    @redo="handleRedo"
   />
 
   <ApiDocs v-else-if="view === 'docs'" />
@@ -651,6 +660,7 @@ onUnmounted(() => {
   <MyRecordView v-else-if="view === 'my-recharges'" title="充值记录" direction="in" empty-text="暂无充值记录" />
 
   <InputBar
+    ref="inputBarRef"
     v-if="view === 'chat' || view === 'image'"
     :style="{
       left: sidebarOffset + 'px',

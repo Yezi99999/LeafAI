@@ -30,6 +30,7 @@ const emit = defineEmits<{
   toggleSidebar: []
   collapseInput: []
   expandInput: []
+  redo: [prompt: string]
 }>()
 
 const COLLAPSE_THRESHOLD = 80
@@ -206,6 +207,23 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
             <div class="image-record-prompt">{{ rec.prompt }}</div>
             <div class="image-record-time">{{ rec.time }}</div>
+            <div v-if="rec.images.length > 0 && rec.status === 'success'" class="image-record-actions">
+              <button class="rec-action" type="button" title="重做" @click="emit('redo', rec.prompt)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <span>重做</span>
+              </button>
+              <button class="rec-action" type="button" title="下载" @click="downloadImage(rec.images[0])">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>下载</span>
+              </button>
+            </div>
           </div>
           <div v-if="imageRecords.length === 0" class="image-records-empty">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -648,7 +666,37 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .image-record-time {
   font-size: 11px;
   color: var(--color-text-secondary);
-  padding: 4px 14px 12px;
+  padding: 4px 14px 8px;
+}
+
+.image-record-actions {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+}
+
+.rec-action {
+  flex: 1;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rec-action:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 .image-records-empty {
