@@ -156,6 +156,8 @@ npm run build      # 生产构建
 - `POST /api/v1/upload/image`：`multipart/form-data`（字段 `file`），需 JWT，支持 `jpeg/png/webp/gif/bmp`，单张不超过限制，返回 `data.url` 为公开访问地址。
 - `GET /api/v1/upload/image/config`：返回当前上传限制 `{ max_size_mb, max_count }`。
 
+描述词可在工作台直接通过**点击选择或拖放**上传参考图（点击「图片」按钮、或把图片直接拖入上传区进行多选），上传后以 40×60px 堆叠卡片预览。历史图片记录的时间戳下方提供固定高度功能条：**重做**（自动回填上次提示词到输入框）、**下载**（浏览器直接下载原图）。
+
 单图大小、单次数量上限由管理后台「上传设置」维护（存于 `SystemConfig`：`upload_max_size_mb` / `upload_max_count`），同时对图床接口与工作台上传生效；图片生成提交参考图时会校验数量上限。
 
 详细字段与 curl 示例见 [`docs/api-integration.md`](docs/api-integration.md#6-图片上传可作为独立图床)。
