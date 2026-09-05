@@ -396,59 +396,67 @@ function handleModeChange(mode: string) {
 }
 
 async function handleLogin(username: string, password: string) {
-  const res = await api.login(username, password)
-  localStorage.setItem('leafai_token', res.data.access_token)
   try {
-    const me = await api.getMe()
-    currentUser.value = me.data
-    isLoggedIn.value = true
-  } catch {
-    currentUser.value = {
-      id: 0,
-      user_id: res.data.user_id,
-      username: res.data.username,
-      email: null,
-      is_active: true,
-      is_superuser: false,
-      role: 'user',
-      points_balance: 0,
-      free_quota: {},
+    const res = await api.login(username, password)
+    localStorage.setItem('leafai_token', res.data.access_token)
+    try {
+      const me = await api.getMe()
+      currentUser.value = me.data
+      isLoggedIn.value = true
+    } catch {
+      currentUser.value = {
+        id: 0,
+        user_id: res.data.user_id,
+        username: res.data.username,
+        email: null,
+        is_active: true,
+        is_superuser: false,
+        role: 'user',
+        points_balance: 0,
+        free_quota: {},
+      }
+      isLoggedIn.value = true
     }
-    isLoggedIn.value = true
+    showAuth.value = false
+    await loadFeatures()
+    await loadAssets()
+    await loadImageModels()
+    await loadChatHistory()
+  } catch (e: any) {
+    showToast(e.message || '登录失败', 'error')
   }
-  showAuth.value = false
-  await loadFeatures()
-  await loadAssets()
-  await loadImageModels()
-  await loadChatHistory()
 }
 
 async function handleRegister(username: string, password: string, email?: string) {
-  const res = await api.register(username, password, email)
-  localStorage.setItem('leafai_token', res.data.access_token)
   try {
-    const me = await api.getMe()
-    currentUser.value = me.data
-    isLoggedIn.value = true
-  } catch {
-    currentUser.value = {
-      id: 0,
-      user_id: res.data.user_id,
-      username: res.data.username,
-      email: null,
-      is_active: true,
-      is_superuser: false,
-      role: 'user',
-      points_balance: 0,
-      free_quota: {},
+    const res = await api.register(username, password, email)
+    localStorage.setItem('leafai_token', res.data.access_token)
+    try {
+      const me = await api.getMe()
+      currentUser.value = me.data
+      isLoggedIn.value = true
+    } catch {
+      currentUser.value = {
+        id: 0,
+        user_id: res.data.user_id,
+        username: res.data.username,
+        email: null,
+        is_active: true,
+        is_superuser: false,
+        role: 'user',
+        points_balance: 0,
+        free_quota: {},
+      }
+      isLoggedIn.value = true
     }
-    isLoggedIn.value = true
+    showAuth.value = false
+    await loadFeatures()
+    await loadAssets()
+    await loadImageModels()
+    await loadChatHistory()
+  } catch (e: any) {
+    showToast(e.message || '注册失败', 'error')
   }
-  showAuth.value = false
-  await loadFeatures()
-  await loadAssets()
-  await loadImageModels()
-  await loadChatHistory()
 }
 
 async function loadFeatures() {
@@ -688,6 +696,7 @@ onUnmounted(() => {
     @collapse-input="inputCollapsed = true"
     @expand-input="inputCollapsed = false"
     @redo="handleRedo"
+    @toast="showToast"
   />
 
   <ApiDocs v-else-if="view === 'docs'" />

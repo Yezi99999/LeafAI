@@ -41,6 +41,7 @@ const emit = defineEmits<{
     resolution?: string
     refImages?: string[]
   }]
+  toast: [text: string, type?: 'success' | 'error' | 'info']
 }>()
 
 const COLLAPSE_THRESHOLD = 80
@@ -95,6 +96,24 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') closePreview()
   else if (e.key === 'ArrowLeft') previewPrev()
   else if (e.key === 'ArrowRight') previewNext()
+}
+
+// 复制提示词
+function copyPrompt(text: string) {
+  if (!text) return
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      emit('toast', '已复制提示词到剪贴板', 'success')
+    })
+  } else {
+    const t = document.createElement('textarea')
+    t.value = text
+    document.body.appendChild(t)
+    t.select()
+    document.execCommand('copy')
+    document.body.removeChild(t)
+    emit('toast', '已复制提示词到剪贴板', 'success')
+  }
 }
 
 // 下载原图：先拉取为 Blob 再触发浏览器下载，避免跨域/签名链接直接跳转
@@ -224,6 +243,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                 </svg>
                 <span>重做</span>
+              </button>
+              <button class="rec-action" type="button" title="复制提示词" @click="copyPrompt(rec.prompt)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span>提示词</span>
               </button>
               <button class="rec-action" type="button" title="下载" @click="downloadImage(rec.images[0])">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
