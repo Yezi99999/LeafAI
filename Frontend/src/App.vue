@@ -23,12 +23,26 @@ const activeMode = ref<'chat' | 'image'>('chat')
 type View = 'chat' | 'image' | 'docs' | 'my-points' | 'my-recharges'
 const view = ref<View>('chat')
 
-// 「重做」：将历史图片记录提示词回填到输入框
-const inputBarRef = ref<{ setPrompt: (t: string) => void } | null>(null)
-function handleRedo(promptText: string) {
+// 「重做」：将历史图片记录的完整参数回填到输入框
+const inputBarRef = ref<{
+  applyRedo: (p: {
+    prompt?: string
+    modelId?: number
+    quality?: string
+    resolution?: string
+    refImages?: string[]
+  }) => void
+} | null>(null)
+function handleRedo(rec: {
+  prompt?: string
+  modelId?: number
+  quality?: string
+  resolution?: string
+  refImages?: string[]
+}) {
   view.value = 'chat'
   activeMode.value = 'image'
-  inputBarRef.value?.setPrompt(promptText)
+  inputBarRef.value?.applyRedo(rec)
 }
 
 function onNavigate(navId: string) {
@@ -97,6 +111,11 @@ interface Asset {
   errorMsg: string
   messageId: number
   createTime: string
+  // 重做用：记录该次图片生成的完整参数，便于一键回填
+  modelId?: number
+  quality?: string
+  resolution?: string
+  refImages?: string[]
 }
 
 const assets = ref<Asset[]>([])
@@ -285,6 +304,10 @@ async function handleImageGenerate(params: {
       errorMsg: '',
       messageId: 0,
       createTime: nowIso,
+      modelId: mid,
+      quality: params.quality,
+      resolution: params.resolution,
+      refImages: params.images && params.images.length ? [...params.images] : [],
     }
     assets.value.push(task)
     sortAssets()
@@ -302,6 +325,10 @@ async function handleImageGenerate(params: {
       errorMsg: e.message || '未知错误',
       messageId: 0,
       createTime: nowIso,
+      modelId: imageModels.value[0]?.id ?? 1,
+      quality: params.quality,
+      resolution: params.resolution,
+      refImages: params.images && params.images.length ? [...params.images] : [],
     }
     assets.value.push(task)
     sortAssets()
@@ -573,6 +600,10 @@ const imageRecords = computed(() =>
       status: a.status,
       errorMsg: a.errorMsg,
       time: formatMsgTime(a.createTime),
+      modelId: a.modelId,
+      quality: a.quality,
+      resolution: a.resolution,
+      refImages: a.refImages,
     }))
 )
 

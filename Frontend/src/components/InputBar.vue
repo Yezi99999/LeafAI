@@ -99,15 +99,31 @@ function removeImage(idx: number) {
   uploadError.value = ''
 }
 
-// 供外部（重做）填充输入框
-function setPrompt(text: string) {
-  prompt.value = text
+// 供外部（重做）一次性回填图片生成的完整参数
+function applyRedo(r: {
+  prompt?: string
+  modelId?: number
+  quality?: string
+  resolution?: string
+  refImages?: string[]
+}) {
+  if (r.prompt !== undefined && r.prompt !== null) prompt.value = r.prompt
+  if (r.modelId !== undefined && r.modelId !== null) {
+    const m = models.value.find((x) => String(x.id) === String(r.modelId))
+    if (m) selectedModel.value = m
+  }
+  if (r.quality) {
+    const q = qualities.find((x) => x.value === r.quality)
+    if (q) selectedQuality.value = q
+  }
+  if (r.resolution) selectedResolution.value = r.resolution
+  if (Array.isArray(r.refImages)) uploadedImages.value = r.refImages.filter(Boolean)
   nextTick(() => {
     textareaRef.value?.focus()
   })
 }
 
-defineExpose({ setPrompt })
+defineExpose({ applyRedo })
 
 interface ModelOption {
   id: number | string

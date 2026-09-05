@@ -17,6 +17,10 @@ interface ImageRecord {
   status: string
   errorMsg: string
   time: string
+  modelId?: number
+  quality?: string
+  resolution?: string
+  refImages?: string[]
 }
 
 const props = defineProps<{
@@ -30,7 +34,13 @@ const emit = defineEmits<{
   toggleSidebar: []
   collapseInput: []
   expandInput: []
-  redo: [prompt: string]
+  redo: [rec: {
+    prompt?: string
+    modelId?: number
+    quality?: string
+    resolution?: string
+    refImages?: string[]
+  }]
 }>()
 
 const COLLAPSE_THRESHOLD = 80
@@ -208,7 +218,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <div class="image-record-prompt">{{ rec.prompt }}</div>
             <div class="image-record-time">{{ rec.time }}</div>
             <div v-if="rec.images.length > 0 && rec.status === 'success'" class="image-record-actions">
-              <button class="rec-action" type="button" title="重做" @click="emit('redo', rec.prompt)">
+              <button class="rec-action" type="button" title="重做" @click="emit('redo', { prompt: rec.prompt, modelId: rec.modelId, quality: rec.quality, resolution: rec.resolution, refImages: rec.refImages })">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
