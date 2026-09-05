@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { adminApiRecords, type CallRecordItem } from '../api/index'
+import { toLocalDateTime } from '../utils/datetime'
 
 const items = ref<CallRecordItem[]>([])
 const total = ref(0)
@@ -27,8 +28,7 @@ const SERVICE_OPTIONS = [
 
 function fmtTime(iso: string) {
   if (!iso) return '—'
-  const d = new Date(iso)
-  return isNaN(d.getTime()) ? iso : d.toLocaleString()
+  return toLocalDateTime(iso)
 }
 
 function statusLabel(status: string) {

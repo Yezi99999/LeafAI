@@ -532,7 +532,9 @@ async function restoreSession() {
 }
 
 function formatMsgTime(iso: string): string {
-  const d = new Date(iso)
+  // 后端返回的是无时区的 UTC 时间，补 'Z' 使 JS 按 UTC 解析，再换算成本地时区展示（如 CST +8）
+  const normalized = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso) ? iso : `${iso}Z`
+  const d = new Date(normalized)
   if (isNaN(d.getTime())) return ''
   return `${d.getMonth() + 1}-${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }

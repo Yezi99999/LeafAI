@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { api, type PointsRecord } from '../api'
+import { toLocalDateTime } from '../utils/datetime'
 
 const props = defineProps<{
   title: string
@@ -83,7 +84,7 @@ function fmt(d: number) {
             <td>{{ r.balance_after }}</td>
             <td>{{ SERVICE_LABEL[r.service_code || ''] || r.service_code || '-' }}</td>
             <td>{{ r.remark || '-' }}</td>
-            <td>{{ new Date(r.create_time).toLocaleString() }}</td>
+            <td>{{ toLocalDateTime(r.create_time) }}</td>
           </tr>
         </tbody>
       </table>
