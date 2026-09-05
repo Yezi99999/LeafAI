@@ -574,6 +574,10 @@ async function loadAssets() {
         errorMsg: t.error_msg || '',
         messageId: 0,
         createTime: t.create_time || '',
+        modelId: t.input_params?.model_id ?? undefined,
+        quality: t.input_params?.quality || undefined,
+        resolution: t.input_params?.resolution || undefined,
+        refImages: Array.isArray(t.input_params?.image) ? t.input_params.image : undefined,
       }
     })
     sortAssets()
